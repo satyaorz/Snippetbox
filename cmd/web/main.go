@@ -5,27 +5,17 @@ import (
 	"net/http"
 )
 
-// Define a home handler function which writes a byte slice containing
-// "Hello from Snippetbox" as the response body.
-// w is used to send a response back to the client, and r contains all details about the incoming request
-func home(w http.ResponseWriter, r *http.Request) { 
-	w.Write([]byte("Hello from Snippetbox"))
-}
 
-func snippetView(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Display a specific snippet..."))
-}
-
-func snippetCreate(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Display a form for creating a new snippet..."))
-}
 func main() {
 	// Use the http.NewServeMux() function to intialize a new sermux
 	// then reister the home function as the handle for the "/" URL pattern
 	mux := http.NewServeMux()
-	mux.HandleFunc("/{$}", home)
-	mux.HandleFunc("/snippet/view", snippetView)
-	mux.HandleFunc("/snippet/create", snippetCreate)
+	mux.HandleFunc("GET /{$}", home)
+	mux.HandleFunc("GET /snippet/view/{id}", snippetView)
+	mux.HandleFunc("GET /snippet/create", snippetCreate)
+
+	// post
+	mux.HandleFunc("POST /snippet/create", snippetCreatePost)
 
 	// Print a log message to say that the server is starting.
 	log.Print("starting server on: 4000")
