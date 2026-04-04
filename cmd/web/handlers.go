@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 )
@@ -10,12 +12,39 @@ import (
 // "Hello from Snippetbox" as the response body.
 // w is used to send a response back to the client, and r contains all details about the incoming request
 func home(w http.ResponseWriter, r *http.Request) {
-	// SUe the Header().Add() method to add a 'Server: Go' header to the
+	// Use the Header().Add() method to add a 'Server: Go' header to the
 	// response header map. The first paraeter is the header name, and
 	// the second parameter is the header value.
 	w.Header().Add("Server", "Go")
 
-	fmt.Fprint(w, "Hello from Snippetbox\n")
+	// Initialize a slice containing the paths to the two files. It's important
+	// to note that the files containg our base template mus be the *first*
+	// file in the slice
+	files := []string {
+		"./ui/html/base.tmpl.html",
+		"./ui/html/partials/nav.tmpl.html",
+		"./ui/html/pages/home.tmpl.html",
+	}
+
+	// Use the template.ParseFiles() functin to read the files and store the
+	// templates in a template set. Notice that we use .. to pass the contents
+	// of the files slice as variadic arguments.
+	// user, and then return from the handler so no susequent code is eecuted.
+	ts, err := template.ParseFiles(files...)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Use the ExecuteTemplate() method to write the contents of the "base"
+	// template as the response body.
+	err = ts.ExecuteTemplate(w, "base", nil)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+
 }
 
 func snippetView(w http.ResponseWriter, r *http.Request) {
@@ -43,5 +72,5 @@ func snippetCreatePost(w http.ResponseWriter, r *http.Request) {
 	// Use the w.WriteHeader() method to send a 201 status code.
 	w.WriteHeader(http.StatusCreated)
 
-	fmt.Fprint(w, "Save a new snippet...\n")
+	w.Write([]byte("Save a new snippet...\n"))
 }
