@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
+	"fmt"
 )
 
 // The serverErro helper writes a log entry at Error level (including the request
@@ -15,6 +17,26 @@ func (app *application) serverError(w http.ResponseWriter, r *http.Request, err 
 
 	app.logger.Error(err.Error(), "Method", method, "uri", uri)
 	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+}
+
+func (app *application) render(w http.ResponseWriter, r *http.Request, status int, page string, data templateData) {
+	ts, ok := app.templateCache[page]
+
+	if !ok {
+		err := fmt.Errorf("the themplate %s does not exist", page)
+		app.serverError(w, r, err)
+		return
+	}
+
+	buf := new(bytes.Buffer)
+	
+	err := ts.ExecuteTemplate(buf, "base", data)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+
+	w.WriteHeader(status)
+	buf.WriteTo(w)
 }
 
 // The clientError helper sends a specific status code and coreesponding description

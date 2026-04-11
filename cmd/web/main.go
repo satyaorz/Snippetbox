@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"flag"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,12 +13,13 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-//an application struct to hold the application-wide dependencies for the
-// web application. For now we'll only include the stuctured logger, but we'll 
+// an application struct to hold the application-wide dependencies for the
+// web application. For now we'll only include the stuctured logger, but we'll
 // add mroe to this as the uild progresses.
 type application struct {
-	logger *slog.Logger
-	snippets *models.SnippetModel
+	logger        *slog.Logger
+	snippets      *models.SnippetModel
+	templateCache map[string]*template.Template
 }
 
 func main() {
@@ -40,23 +42,38 @@ func main() {
 
 	defer db.Close()
 
-	app := &application{
-		logger : logger,
-		snippets: &models.SnippetModel{DB: db},
+	templateCache, err := newTemplateCache()
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
 	}
-	
+	defer db.Close()
+
+	// Initialize a new template cache
+	if err != nil {
+		logger.Error(err.Error())
+	}
+
+	// And add it to the application dependecies
+
+	app := &application{
+		logger:   logger,
+		snippets: &models.SnippetModel{DB: db},
+		templateCache: templateCache,
+	}
+
 	// the info() method t the log the staring server messgae at Info severity
 	// (along with the listen address as an attribute)
 	logger.Info("Starting server", slog.Any("addr", *addr))
 
-	err = http.ListenAndServe(*addr, app.routes()) 
+	err = http.ListenAndServe(*addr, app.routes())
 	logger.Error(err.Error())
 	os.Exit(1)
 }
 
 func openDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
-	if  err != nil {
+	if err != nil {
 		return nil, err
 	}
 	err = db.Ping()
