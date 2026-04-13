@@ -12,7 +12,7 @@ import (
 
 // *application
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Server", "Go")
+	// panic("oops! something went wrong") 
 	snippets, err := app.snippets.Latest()
 	if err != nil {
 		app.serverError(w, r, err)
@@ -73,7 +73,8 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Display a form for creating a new snippet...\n"))
+	data := app.newTemplateData(r)
+	app.render(w, r, http.StatusOK, "create.tmpl.html", data)
 }
 
 func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request) {
@@ -90,4 +91,26 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 
 	// Redirect the user to the relevant page for the snippet.
 	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d", id), http.StatusSeeOther)
+}
+
+// newTemplateData returns an initialized templateData struct for use in
+// rendering templates. It centralizes any common data we want available to
+// all templates.
+func (app *application) newTemplateData(r *http.Request) templateData {
+	return templateData{}
+}
+
+func (app *application) logRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var (
+			ip     = r.RemoteAddr
+			proto  = r.Proto
+			method = r.Method
+			uri    = r.URL.RequestURI()
+		)
+
+		app.logger.Info("received request", "ip", ip, "proto", proto, "method", method, "uri", uri)
+
+		next.ServeHTTP(w, r)
+	})
 }
