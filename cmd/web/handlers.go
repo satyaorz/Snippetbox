@@ -93,7 +93,6 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 		Title: r.PostForm.Get("title"),
 		Content: r.PostForm.Get("content"),
 		Expires: expires,
-		FieldErrors: map[string]string{},
 	}
 
 	if strings.TrimSpace(form.Title) == "" {
