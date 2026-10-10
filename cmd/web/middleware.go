@@ -58,6 +58,15 @@ func (app *application) logRequest(next http.Handler) http.Handler {
 func (app *application) requireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !app.isAuthenticated(r) {
+			// Remember which page the user was trying to reach, so we can send
+			// them back there after they log in. Only GET requests are stored,
+			// since redirecting to a POST-only route would just give a 405.
+			// r.URL.Path has already been cleaned by ServeMux, so it is always
+			// a local path and can't be abused as an open redirect.
+			if r.Method == http.MethodGet {
+				app.sessionManager.Put(r.Context(), "redirectPathAfterLogin", r.URL.Path)
+			}
+
 			http.Redirect(w, r, "/user/login", http.StatusSeeOther)
 			return
 		}

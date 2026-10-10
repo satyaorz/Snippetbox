@@ -145,8 +145,9 @@ func extractCSRFToken(t *testing.T, body string) string {
 	return html.UnescapeString(matches[1])
 }
 
-// login signs in as the mock user "alice@example.com" (user ID 1).
-func (ts *testServer) login(t *testing.T) {
+// login signs in as the mock user "alice@example.com" (user ID 1) and
+// returns the login response, so tests can check where it redirects to.
+func (ts *testServer) login(t *testing.T) testResponse {
 	t.Helper()
 
 	res := ts.get(t, "/user/login")
@@ -159,4 +160,6 @@ func (ts *testServer) login(t *testing.T) {
 	if res.status != http.StatusSeeOther {
 		t.Fatalf("login failed: got status %d", res.status)
 	}
+
+	return res
 }

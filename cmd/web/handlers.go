@@ -239,6 +239,15 @@ func (app *application) userLoginPost(w http.ResponseWriter, r *http.Request) {
 	// "logged in".
 	app.sessionManager.Put(r.Context(), "authenticatedUserID", id)
 
+	// If the user was sent here by requireAuthentication, send them back to
+	// the page they originally asked for. PopString() also removes the value
+	// so it only applies to this one login.
+	path := app.sessionManager.PopString(r.Context(), "redirectPathAfterLogin")
+	if path != "" {
+		http.Redirect(w, r, path, http.StatusSeeOther)
+		return
+	}
+
 	http.Redirect(w, r, "/snippet/create", http.StatusSeeOther)
 }
 

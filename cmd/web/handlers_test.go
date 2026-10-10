@@ -232,3 +232,43 @@ func TestAccountView(t *testing.T) {
 		assert.StringContains(t, res.body, "<a href='/account/view'>Account</a>")
 	})
 }
+
+func TestRedirectAfterLogin(t *testing.T) {
+	t.Run("Back to the requested page", func(t *testing.T) {
+		app := newTestApplication(t)
+		ts := newTestServer(t, app.routes())
+
+		res := ts.get(t, "/account/view")
+		assert.Equal(t, res.headers.Get("Location"), "/user/login")
+
+		res = ts.login(t)
+		assert.Equal(t, res.headers.Get("Location"), "/account/view")
+	})
+
+	t.Run("Only redirects once", func(t *testing.T) {
+		app := newTestApplication(t)
+		ts := newTestServer(t, app.routes())
+
+		ts.get(t, "/account/view")
+		ts.login(t)
+
+		// Log out and back in again: the stored path was popped on the first
+		// login, so we fall back to the default page.
+		res := ts.get(t, "/")
+		form := url.Values{}
+		form.Add("csrf_token", extractCSRFToken(t, res.body))
+		res = ts.postForm(t, "/user/logout", form)
+		assert.Equal(t, res.status, http.StatusSeeOther)
+
+		res = ts.login(t)
+		assert.Equal(t, res.headers.Get("Location"), "/snippet/create")
+	})
+
+	t.Run("Default without a stored page", func(t *testing.T) {
+		app := newTestApplication(t)
+		ts := newTestServer(t, app.routes())
+
+		res := ts.login(t)
+		assert.Equal(t, res.headers.Get("Location"), "/snippet/create")
+	})
+}
