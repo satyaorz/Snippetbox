@@ -89,5 +89,13 @@ func (app *application) newTemplateData(r *http.Request) templateData {
 // isAuthenticated returns true if the current request is from an
 // authenticated user, otherwise false.
 func (app *application) isAuthenticated(r *http.Request) bool {
-	return app.sessionManager.Exists(r.Context(), "authenticatedUserID")
+	// The value is set by the authenticate middleware. If it's missing (or
+	// isn't a bool), the type assertion fails and we treat the request as
+	// unauthenticated.
+	isAuthenticated, ok := r.Context().Value(isAuthenticatedContextKey).(bool)
+	if !ok {
+		return false
+	}
+
+	return isAuthenticated
 }
