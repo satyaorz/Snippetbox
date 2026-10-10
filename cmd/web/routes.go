@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 
+	"github.com/satyaorz/snippetbox/ui"
+
 	"github.com/justinas/alice"
 )
 
@@ -10,8 +12,10 @@ import (
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 
-	fileServer := http.FileServer(http.Dir("./ui/static/"))
-	mux.Handle("GET /static/", http.StripPrefix("/static", fileServer))
+	// Serve static files from the embedded filesystem. Because the embedded
+	// files live under "static/...", a request for /static/css/main.css maps
+	// directly onto them without needing to strip a prefix.
+	mux.Handle("GET /static/", http.FileServerFS(ui.Files))
 
 	// Create a new middleware chain containing the middleware specific to our
 	// dynamic application routes: session loading/saving, CSRF protection and
