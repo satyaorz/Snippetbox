@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
-	"net/http"
+	"errors"
 	"fmt"
+	"net/http"
+	// "time"
+
+	"github.com/go-playground/form/v4"
 )
 
 // The serverErro helper writes a log entry at Error level (including the request
@@ -37,6 +41,27 @@ func (app *application) render(w http.ResponseWriter, r *http.Request, status in
 
 	w.WriteHeader(status)
 	buf.WriteTo(w)
+}
+
+func (app *application) decodePostForm(r *http.Request, dst any) error {
+	// Call ParseFrom() on the request, int the same way that is done in snippetCreatePost handler.
+	err := r.ParseForm()
+	if err != nil {
+		return err
+	}
+
+	err = app.formDecoder.Decode(dst, r.PostForm)
+	if err != nil {
+		var invalidDecoderError *form.InvalidDecoderError
+
+		if errors.As(err, &invalidDecoderError) {
+			panic(err)
+		}
+	}
+
+	return err
+
+
 }
 
 // The clientError helper sends a specific status code and coreesponding description

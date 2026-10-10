@@ -16,9 +16,9 @@ import (
 // input with the name "title" in the Title field. The struct tag `form:"-"`
 // tells the decoder to completey ignore a filed during decoding.
 type snippetCreateForm struct {
-	Title   string `form:"title"`
-	Content string `form:"content"`
-	Expires int `form:"expires"`
+	Title               string `form:"title"`
+	Content             string `form:"content"`
+	Expires             int    `form:"expires"`
 	validator.Validator `form:"-"`
 }
 
@@ -80,20 +80,9 @@ func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		app.clientError(w, http.StatusBadRequest)
-		return
-	}
-
-	// Declare a new empty instance of the snippetCreateForm struct.
 	var form snippetCreateForm
 
-	// call the Decode() method of the form decoder, passing in the current
-	// request and *a pointer* to our snippetCreateForm struct. This will
-	// essentially fill our struct with the relative values from the HTML form.
-	// If there is a problem, we return a 400 Bad Request reposnse to the client.
-	err = app.formDecoder.Decode(&form, r.PostForm)
+	err := app.decodePostForm(r, &form)
 	if err != nil {
 		app.clientError(w, http.StatusBadRequest)
 		return
@@ -103,20 +92,21 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 	form.CheckField(validator.MaxChars(form.Title, 100), "title", "This field cannot be more than 100 characters long")
 	form.CheckField(validator.NotBlank(form.Content), "content", "This field cannot be blank")
 	form.CheckField(validator.PermittedValue(form.Expires, 1, 7, 365), "expires", "This field must equal 1, 7 or 365")
-	// Use the Valid() method to see if any of the checks failed. If they did,
-	// then re-render the template passing in the form in the same way as
-	// before.
+
 	if !form.Valid() {
 		data := app.newTemplateData(r)
 		data.Form = form
 		app.render(w, r, http.StatusUnprocessableEntity, "create.tmpl", data)
 		return
 	}
+
 	id, err := app.snippets.Insert(form.Title, form.Content, form.Expires)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
+
+	
 	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d", id), http.StatusSeeOther)
 }
 
