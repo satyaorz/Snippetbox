@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/satyaorz/snippetbox/internal/assert"
@@ -63,4 +64,27 @@ func TestRecoverPanic(t *testing.T) {
 
 	assert.Equal(t, rr.Code, http.StatusInternalServerError)
 	assert.Equal(t, rr.Header().Get("Connection"), "close")
+	assert.Equal(t, strings.TrimSpace(rr.Body.String()), "Internal Server Error")
+}
+
+func TestRecoverPanicDebug(t *testing.T) {
+	app := newTestApplication(t)
+	app.debug = true
+
+	rr := httptest.NewRecorder()
+	r, err := http.NewRequest(http.MethodGet, "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("oops")
+	})
+
+	app.recoverPanic(next).ServeHTTP(rr, r)
+
+	// In debug mode the panic message and a stack trace are shown.
+	assert.Equal(t, rr.Code, http.StatusInternalServerError)
+	assert.StringContains(t, rr.Body.String(), "oops")
+	assert.StringContains(t, rr.Body.String(), "goroutine")
 }

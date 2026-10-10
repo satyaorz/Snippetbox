@@ -5,22 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-playground/form/v4"
 	"github.com/justinas/nosurf"
 )
 
-// The serverErro helper writes a log entry at Error level (including the request
-// method and URI as attributes), then sends a generic 500 Internal Server Error
-// response to the user.
+// The serverError helper writes a log entry at Error level (including the
+// request method, URI and a stack trace as attributes), then sends a generic
+// 500 Internal Server Error response to the user. In debug mode the error and
+// stack trace are included in the response body instead.
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	var (
 		method = r.Method
 		uri    = r.URL.RequestURI()
+		trace  = string(debug.Stack())
 	)
 
-	app.logger.Error(err.Error(), "Method", method, "uri", uri)
+	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
+
+	if app.debug {
+		body := fmt.Sprintf("%s\n%s", err, trace)
+		http.Error(w, body, http.StatusInternalServerError)
+		return
+	}
+
 	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }
 

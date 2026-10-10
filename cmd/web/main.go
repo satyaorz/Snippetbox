@@ -23,6 +23,7 @@ import (
 // web application. For now we'll only include the stuctured logger, but we'll
 // add mroe to this as the uild progresses.
 type application struct {
+	debug          bool
 	logger         *slog.Logger
 	snippets       models.SnippetModelInterface
 	users          models.UserModelInterface
@@ -36,6 +37,10 @@ func main() {
 	addr := flag.String("addr", ":4000", "HTTP network address")
 
 	dsn := flag.String("dsn", "web:pass@/snippetbox?parseTime=true", "MySQL data source name")
+
+	// Debug mode shows detailed errors and stack traces in HTTP responses.
+	// Never enable it in production.
+	debug := flag.Bool("debug", false, "Enable debug mode")
 
 	flag.Parse()
 
@@ -71,6 +76,7 @@ func main() {
 	sessionManager.Cookie.Secure = true
 
 	app := &application{
+		debug:          *debug,
 		logger:         logger,
 		snippets:       &models.SnippetModel{DB: db},
 		users:          &models.UserModel{DB: db},

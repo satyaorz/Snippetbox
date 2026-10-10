@@ -29,6 +29,7 @@ Flags:
 | ------- | ----------------------------------------- | --------------------- |
 | `-addr` | `:4000`                                   | HTTPS network address |
 | `-dsn`  | `web:pass@/snippetbox?parseTime=true`     | MySQL DSN             |
+| `-debug`| `false`                                   | Show errors and stack traces in 500 responses (dev only) |
 
 The server reads `./tls/cert.pem` and `./tls/key.pem`, so run it from the
 project root. Templates and static files are embedded in the binary.
