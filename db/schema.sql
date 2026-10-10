@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     INDEX sessions_expiry_idx (expiry)
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    hashed_password CHAR(60) NOT NULL,
+    created DATETIME NOT NULL,
+    CONSTRAINT users_uc_email UNIQUE (email)
+);
+
 -- Application user (adjust the password for anything beyond local dev).
 CREATE USER IF NOT EXISTS 'web'@'localhost' IDENTIFIED BY 'pass';
 GRANT SELECT, INSERT, UPDATE, DELETE ON snippetbox.* TO 'web'@'localhost';

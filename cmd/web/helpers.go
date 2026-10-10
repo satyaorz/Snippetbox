@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-playground/form/v4"
+	"github.com/justinas/nosurf"
 )
 
 // The serverErro helper writes a log entry at Error level (including the request
@@ -79,6 +80,14 @@ func (app *application) newTemplateData(r *http.Request) templateData {
 		CurrentYear: time.Now().Year(),
 		// Retrieve the "flash" value from the session (and remove it) so it
 		// is only ever shown once.
-		Flash: app.sessionManager.PopString(r.Context(), "flash"),
+		Flash:           app.sessionManager.PopString(r.Context(), "flash"),
+		IsAuthenticated: app.isAuthenticated(r),
+		CSRFToken:       nosurf.Token(r),
 	}
+}
+
+// isAuthenticated returns true if the current request is from an
+// authenticated user, otherwise false.
+func (app *application) isAuthenticated(r *http.Request) bool {
+	return app.sessionManager.Exists(r.Context(), "authenticatedUserID")
 }
