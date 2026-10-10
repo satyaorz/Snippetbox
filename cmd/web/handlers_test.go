@@ -29,6 +29,17 @@ func TestHome(t *testing.T) {
 	assert.StringContains(t, res.body, "<a href='/user/login'>Login</a>")
 }
 
+func TestAbout(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app.routes())
+
+	res := ts.get(t, "/about")
+
+	assert.Equal(t, res.status, http.StatusOK)
+	assert.StringContains(t, res.body, "<h2>About</h2>")
+	assert.StringContains(t, res.body, "<a href='/about'>About</a>")
+}
+
 func TestSnippetView(t *testing.T) {
 	app := newTestApplication(t)
 	ts := newTestServer(t, app.routes())

@@ -37,6 +37,11 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	app.render(w, r, http.StatusOK, "home.tmpl.html", data)
 }
 
+func (app *application) about(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+	app.render(w, r, http.StatusOK, "about.tmpl.html", data)
+}
+
 func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 	// Extract the value of the `id` wildcard from the reques using r.PathValue()
 	// and try to convert it to n intefer using the strconv.Atoi() function. If
