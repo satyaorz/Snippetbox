@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	// "time"
 
 	"github.com/go-playground/form/v4"
 )
@@ -33,10 +32,11 @@ func (app *application) render(w http.ResponseWriter, r *http.Request, status in
 	}
 
 	buf := new(bytes.Buffer)
-	
+
 	err := ts.ExecuteTemplate(buf, "base", data)
 	if err != nil {
 		app.serverError(w, r, err)
+		return
 	}
 
 	w.WriteHeader(status)
@@ -60,8 +60,6 @@ func (app *application) decodePostForm(r *http.Request, dst any) error {
 	}
 
 	return err
-
-
 }
 
 // The clientError helper sends a specific status code and coreesponding description

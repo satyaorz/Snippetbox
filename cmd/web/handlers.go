@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/satyaorz/snippetbox/internal/models"
 	"github.com/satyaorz/snippetbox/internal/validator"
@@ -31,9 +32,10 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Use the new render helper.
-	app.render(w, r, http.StatusOK, "home.tmpl.html", templateData{
-		Snippets: snippets,
-	})
+	data := app.newTemplateData(r)
+	data.Snippets = snippets
+
+	app.render(w, r, http.StatusOK, "home.tmpl.html", data)
 }
 
 func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
@@ -62,9 +64,8 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := templateData{
-		Snippet: snippet,
-	}
+	data := app.newTemplateData(r)
+	data.Snippet = snippet
 
 	app.render(w, r, http.StatusOK, "view.tmpl.html", data)
 }
@@ -96,7 +97,7 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 	if !form.Valid() {
 		data := app.newTemplateData(r)
 		data.Form = form
-		app.render(w, r, http.StatusUnprocessableEntity, "create.tmpl", data)
+		app.render(w, r, http.StatusUnprocessableEntity, "create.tmpl.html", data)
 		return
 	}
 
@@ -106,7 +107,6 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	
 	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d", id), http.StatusSeeOther)
 }
 
@@ -114,7 +114,9 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 // rendering templates. It centralizes any common data we want available to
 // all templates.
 func (app *application) newTemplateData(r *http.Request) templateData {
-	return templateData{}
+	return templateData{
+		CurrentYear: time.Now().Year(),
+	}
 }
 
 func (app *application) logRequest(next http.Handler) http.Handler {
