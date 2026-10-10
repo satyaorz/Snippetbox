@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"flag"
 	"html/template"
@@ -31,7 +32,7 @@ type application struct {
 
 func main() {
 	// Define a new command-line flag with the name "addr", a default value of ":4000"
-	addr := flag.String("addr", ":4000", "HTTP netword address")
+	addr := flag.String("addr", ":4000", "HTTP network address")
 
 	dsn := flag.String("dsn", "web:pass@/snippetbox?parseTime=true", "MySQL data source name")
 
@@ -64,6 +65,9 @@ func main() {
 	sessionManager := scs.New()
 	sessionManager.Store = mysqlstore.New(db)
 	sessionManager.Lifetime = 12 * time.Hour
+	// Make sure that the Secure attribute is set on our session cookies, so
+	// they are only ever sent over an HTTPS connection.
+	sessionManager.Cookie.Secure = true
 
 	app := &application{
 		logger:         logger,
@@ -77,7 +81,31 @@ func main() {
 	// (along with the listen address as an attribute)
 	logger.Info("Starting server", slog.Any("addr", *addr))
 
-	err = http.ListenAndServe(*addr, app.routes())
+	// Only use elliptic curves with assembly implementations, which perform
+	// better under heavy load.
+	tlsConfig := &tls.Config{
+		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+	}
+
+	// Initialize a new http.Server struct so we can use our structured logger
+	// for server errors and set sensible timeouts.
+	srv := &http.Server{
+		Addr:    *addr,
+		Handler: app.routes(),
+		// Route any log entries from the server through our structured logger
+		// at Error level.
+		ErrorLog:  slog.NewLogLogger(logger.Handler(), slog.LevelError),
+		TLSConfig: tlsConfig,
+		// Close keep-alive connections after one minute of inactivity, and
+		// protect against slow-client attacks with read/write timeouts.
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	// Use ListenAndServeTLS() to start the HTTPS server, passing in the paths
+	// to the TLS certificate and corresponding private key.
+	err = srv.ListenAndServeTLS("./tls/cert.pem", "./tls/key.pem")
 	logger.Error(err.Error())
 	os.Exit(1)
 }
