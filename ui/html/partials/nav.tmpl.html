@@ -10,6 +10,7 @@
     </div>
     <div>
         {{if .IsAuthenticated}}
+        <a href='/account/view'>Account</a>
         <!-- Logout is a POST so it can be protected against CSRF -->
         <form action='/user/logout' method='POST'>
             <input type='hidden' name='csrf_token' value='{{.CSRFToken}}'>

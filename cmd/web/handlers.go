@@ -258,6 +258,29 @@ func (app *application) userLogoutPost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+func (app *application) accountView(w http.ResponseWriter, r *http.Request) {
+	// requireAuthentication guarantees this is a logged-in user, so the
+	// session always holds their ID here.
+	userID := app.sessionManager.GetInt(r.Context(), "authenticatedUserID")
+
+	user, err := app.users.Get(userID)
+	if err != nil {
+		// The user may have been deleted since logging in; send them to the
+		// login page rather than showing an error.
+		if errors.Is(err, models.ErrNoRecord) {
+			http.Redirect(w, r, "/user/login", http.StatusSeeOther)
+		} else {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	data := app.newTemplateData(r)
+	data.User = user
+
+	app.render(w, r, http.StatusOK, "account.tmpl.html", data)
+}
+
 // ping is a simple health-check handler which always responds with "OK".
 func ping(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))

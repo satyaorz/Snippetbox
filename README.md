@@ -38,6 +38,7 @@ project root. Templates and static files are embedded in the binary.
 Route pattern              | Handler           | Action
 -------------------------- | ----------------- | ------
 `GET /{$}`                 | home              | Display the home page
+`GET /about`               | about             | Display the about page
 `GET /snippet/view/{id}`   | snippetView       | Display a specific snippet
 `GET /snippet/create`      | snippetCreate     | Display a form for creating a new snippet 🔒
 `POST /snippet/create`     | snippetCreatePost | Save a new snippet 🔒
@@ -46,6 +47,7 @@ Route pattern              | Handler           | Action
 `GET /user/login`          | userLogin         | Display the login form
 `POST /user/login`         | userLoginPost     | Authenticate and log in the user
 `POST /user/logout`        | userLogoutPost    | Log out the user 🔒
+`GET /account/view`        | accountView       | Display the user's account details 🔒
 `GET /ping`                | ping              | Health check (returns `OK`)
 `GET /static/`             | http.FileServerFS | Serve a specific static file
 

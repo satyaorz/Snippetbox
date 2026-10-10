@@ -63,6 +63,25 @@ func TestUserModelInsertAndAuthenticate(t *testing.T) {
 	assert.Equal(t, err, ErrInvalidCredentials)
 }
 
+func TestUserModelGet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("models: skipping integration test")
+	}
+
+	db := newTestDB(t)
+	m := UserModel{DB: db}
+
+	user, err := m.Get(1)
+	assert.NilError(t, err)
+	assert.Equal(t, user.Name, "Alice Jones")
+	assert.Equal(t, user.Email, "alice@example.com")
+	assert.Equal(t, user.Created.Format("2006-01-02 15:04:05"), "2022-01-01 09:18:24")
+	assert.Equal(t, len(user.HashedPassword), 0)
+
+	_, err = m.Get(99)
+	assert.Equal(t, err, ErrNoRecord)
+}
+
 func TestSnippetModel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("models: skipping integration test")

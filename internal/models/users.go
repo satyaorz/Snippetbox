@@ -16,6 +16,7 @@ type UserModelInterface interface {
 	Insert(name, email, password string) error
 	Authenticate(email, password string) (int, error)
 	Exists(id int) (bool, error)
+	Get(id int) (User, error)
 }
 
 // Define a User type. Notice how the field names and types align with the
@@ -100,4 +101,21 @@ func (m *UserModel) Exists(id int) (bool, error) {
 
 	err := m.DB.QueryRow(stmt, id).Scan(&exists)
 	return exists, err
+}
+
+// Get returns the details for a specific user (without the password hash).
+func (m *UserModel) Get(id int) (User, error) {
+	var user User
+
+	stmt := `SELECT id, name, email, created FROM users WHERE id = ?`
+
+	err := m.DB.QueryRow(stmt, id).Scan(&user.ID, &user.Name, &user.Email, &user.Created)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNoRecord
+		}
+		return User{}, err
+	}
+
+	return user, nil
 }

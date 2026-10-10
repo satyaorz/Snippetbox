@@ -208,3 +208,27 @@ func TestSnippetCreate(t *testing.T) {
 		assert.StringContains(t, res.body, "This field must equal 1, 7 or 365")
 	})
 }
+
+func TestAccountView(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app.routes())
+
+	t.Run("Unauthenticated", func(t *testing.T) {
+		res := ts.get(t, "/account/view")
+
+		assert.Equal(t, res.status, http.StatusSeeOther)
+		assert.Equal(t, res.headers.Get("Location"), "/user/login")
+	})
+
+	t.Run("Authenticated", func(t *testing.T) {
+		ts.login(t)
+
+		res := ts.get(t, "/account/view")
+
+		assert.Equal(t, res.status, http.StatusOK)
+		assert.StringContains(t, res.body, "<td>Alice</td>")
+		assert.StringContains(t, res.body, "<td>alice@example.com</td>")
+		assert.StringContains(t, res.body, "<td>01 Jan 2022 at 09:18</td>")
+		assert.StringContains(t, res.body, "<a href='/account/view'>Account</a>")
+	})
+}
