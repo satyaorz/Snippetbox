@@ -10,6 +10,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// UserModelInterface describes the methods our handlers need from a user
+// store, so that tests can swap in a mock implementation.
+type UserModelInterface interface {
+	Insert(name, email, password string) error
+	Authenticate(email, password string) (int, error)
+	Exists(id int) (bool, error)
+}
+
 // Define a User type. Notice how the field names and types align with the
 // columns in the database "users" table?
 type User struct {

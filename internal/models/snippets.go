@@ -17,6 +17,14 @@ type Snippet struct {
 	Expires time.Time
 }
 
+// SnippetModelInterface describes the methods our handlers need from a
+// snippet store, so that tests can swap in a mock implementation.
+type SnippetModelInterface interface {
+	Insert(title string, content string, expires int) (int, error)
+	Get(id int) (Snippet, error)
+	Latest() ([]Snippet, error)
+}
+
 // Define a SnippetModel type which wraps a sql.DB connection pool.
 type SnippetModel struct {
 	DB *sql.DB
@@ -43,7 +51,7 @@ func (m *SnippetModel) Insert(title string, content string, expires int) (int, e
 	return int(id), nil
 }
 
-// This will insert a new snippet into the database.
+// This will return a specific snippet based on its id.
 func (m *SnippetModel) Get(id int) (Snippet, error) {
 	// Write the SQL statement we want to execute
 	stmt := `SELECT id, title, content, created, expires FROM snippets

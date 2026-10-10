@@ -17,6 +17,9 @@ func (app *application) routes() http.Handler {
 	// directly onto them without needing to strip a prefix.
 	mux.Handle("GET /static/", http.FileServerFS(ui.Files))
 
+	// A simple health-check endpoint that doesn't need any middleware.
+	mux.HandleFunc("GET /ping", ping)
+
 	// Create a new middleware chain containing the middleware specific to our
 	// dynamic application routes: session loading/saving, CSRF protection and
 	// authentication. The static file route doesn't need any of these.
