@@ -272,3 +272,59 @@ func TestRedirectAfterLogin(t *testing.T) {
 		assert.Equal(t, res.headers.Get("Location"), "/snippet/create")
 	})
 }
+
+func TestAccountPasswordUpdate(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app.routes())
+
+	t.Run("Unauthenticated", func(t *testing.T) {
+		res := ts.get(t, "/account/password/update")
+
+		assert.Equal(t, res.status, http.StatusSeeOther)
+		assert.Equal(t, res.headers.Get("Location"), "/user/login")
+	})
+
+	ts.login(t)
+
+	res := ts.get(t, "/account/password/update")
+	assert.Equal(t, res.status, http.StatusOK)
+	csrfToken := extractCSRFToken(t, res.body)
+
+	const formTag = "<form action='/account/password/update' method='POST' novalidate>"
+
+	tests := []struct {
+		name            string
+		currentPassword string
+		newPassword     string
+		confirmation    string
+		wantCode        int
+		wantBody        string
+	}{
+		{"Valid", "pa$$word", "newPa$$word", "newPa$$word", http.StatusSeeOther, ""},
+		{"Wrong current password", "wrong", "newPa$$word", "newPa$$word", http.StatusUnprocessableEntity, "Current password is incorrect"},
+		{"Empty current password", "", "newPa$$word", "newPa$$word", http.StatusUnprocessableEntity, formTag},
+		{"Short new password", "pa$$word", "short", "short", http.StatusUnprocessableEntity, "at least 8 characters"},
+		{"Mismatched confirmation", "pa$$word", "newPa$$word", "different1", http.StatusUnprocessableEntity, "Passwords do not match"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			form := url.Values{}
+			form.Add("currentPassword", tt.currentPassword)
+			form.Add("newPassword", tt.newPassword)
+			form.Add("newPasswordConfirmation", tt.confirmation)
+			form.Add("csrf_token", csrfToken)
+
+			res := ts.postForm(t, "/account/password/update", form)
+
+			assert.Equal(t, res.status, tt.wantCode)
+
+			if tt.wantCode == http.StatusSeeOther {
+				assert.Equal(t, res.headers.Get("Location"), "/account/view")
+			}
+			if tt.wantBody != "" {
+				assert.StringContains(t, res.body, tt.wantBody)
+			}
+		})
+	}
+}

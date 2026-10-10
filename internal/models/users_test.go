@@ -82,6 +82,32 @@ func TestUserModelGet(t *testing.T) {
 	assert.Equal(t, err, ErrNoRecord)
 }
 
+func TestUserModelPasswordUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("models: skipping integration test")
+	}
+
+	db := newTestDB(t)
+	m := UserModel{DB: db}
+
+	// The seeded user's password is "pa$$word".
+	err := m.PasswordUpdate(1, "wrong", "newPa$$word")
+	assert.Equal(t, err, ErrInvalidCredentials)
+
+	err = m.PasswordUpdate(99, "pa$$word", "newPa$$word")
+	assert.Equal(t, err, ErrNoRecord)
+
+	err = m.PasswordUpdate(1, "pa$$word", "newPa$$word")
+	assert.NilError(t, err)
+
+	_, err = m.Authenticate("alice@example.com", "pa$$word")
+	assert.Equal(t, err, ErrInvalidCredentials)
+
+	id, err := m.Authenticate("alice@example.com", "newPa$$word")
+	assert.NilError(t, err)
+	assert.Equal(t, id, 1)
+}
+
 func TestSnippetModel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("models: skipping integration test")

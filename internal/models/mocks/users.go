@@ -9,6 +9,7 @@ import (
 // UserModel is an in-memory stand-in for models.UserModel.
 //   - "dupe@example.com" is treated as already registered.
 //   - "alice@example.com" / "pa$$word" are valid credentials for user ID 1.
+//   - PasswordUpdate succeeds for user ID 1 when the current password is "pa$$word".
 type UserModel struct{}
 
 func (m *UserModel) Insert(name, email, password string) error {
@@ -48,4 +49,15 @@ func (m *UserModel) Get(id int) (models.User, error) {
 	}
 
 	return models.User{}, models.ErrNoRecord
+}
+
+func (m *UserModel) PasswordUpdate(id int, currentPassword, newPassword string) error {
+	if id == 1 {
+		if currentPassword != "pa$$word" {
+			return models.ErrInvalidCredentials
+		}
+		return nil
+	}
+
+	return models.ErrNoRecord
 }

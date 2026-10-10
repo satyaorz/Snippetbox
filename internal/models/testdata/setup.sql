@@ -18,10 +18,11 @@ CREATE TABLE users (
 
 ALTER TABLE users ADD CONSTRAINT users_uc_email UNIQUE (email);
 
+-- hashed_password is the bcrypt hash (cost 12) of "pa$$word".
 INSERT INTO users (name, email, hashed_password, created) VALUES (
     'Alice Jones',
     'alice@example.com',
-    '$2a$12$NuTjWXm3KKntReFwyBVHyuf/to.HEwTy.eS206TNfkGfr6HzGJSWG',
+    '$2a$12$LXFGpmGCepzIAE5ftkRCLO5rGrrMKCuTjubErAaJB2RmAENu4gn.e',
     '2022-01-01 09:18:24'
 );
 

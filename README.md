@@ -48,6 +48,8 @@ Route pattern              | Handler           | Action
 `POST /user/login`         | userLoginPost     | Authenticate and log in the user
 `POST /user/logout`        | userLogoutPost    | Log out the user 🔒
 `GET /account/view`        | accountView       | Display the user's account details 🔒
+`GET /account/password/update`  | accountPasswordUpdate     | Display the change password form 🔒
+`POST /account/password/update` | accountPasswordUpdatePost | Change the user's password 🔒
 `GET /ping`                | ping              | Health check (returns `OK`)
 `GET /static/`             | http.FileServerFS | Serve a specific static file
 
