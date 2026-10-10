@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/form/v4"
 )
@@ -68,4 +69,16 @@ func (app *application) decodePostForm(r *http.Request, dst any) error {
 
 func (app *application) clientError(w http.ResponseWriter, status int) {
 	http.Error(w, http.StatusText(status), status)
+}
+
+// newTemplateData returns an initialized templateData struct for use in
+// rendering templates. It centralizes any common data we want available to
+// all templates.
+func (app *application) newTemplateData(r *http.Request) templateData {
+	return templateData{
+		CurrentYear: time.Now().Year(),
+		// Retrieve the "flash" value from the session (and remove it) so it
+		// is only ever shown once.
+		Flash: app.sessionManager.PopString(r.Context(), "flash"),
+	}
 }

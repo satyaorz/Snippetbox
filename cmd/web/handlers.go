@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/satyaorz/snippetbox/internal/models"
 	"github.com/satyaorz/snippetbox/internal/validator"
@@ -107,29 +106,9 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Use the Put() method to add a string value ("Snippet successfully
+	// created!") and the corresponding key ("flash") to the session data.
+	app.sessionManager.Put(r.Context(), "flash", "Snippet successfully created!")
+
 	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d", id), http.StatusSeeOther)
-}
-
-// newTemplateData returns an initialized templateData struct for use in
-// rendering templates. It centralizes any common data we want available to
-// all templates.
-func (app *application) newTemplateData(r *http.Request) templateData {
-	return templateData{
-		CurrentYear: time.Now().Year(),
-	}
-}
-
-func (app *application) logRequest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var (
-			ip     = r.RemoteAddr
-			proto  = r.Proto
-			method = r.Method
-			uri    = r.URL.RequestURI()
-		)
-
-		app.logger.Info("received request", "ip", ip, "proto", proto, "method", method, "uri", uri)
-
-		next.ServeHTTP(w, r)
-	})
 }
