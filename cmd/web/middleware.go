@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/satyaorz/snippetbox/internal/models"
 
 	"github.com/justinas/nosurf"
 )
@@ -94,8 +97,9 @@ func noSurf(next http.Handler) http.Handler {
 }
 
 // authenticate checks whether the authenticatedUserID in the session belongs
-// to a user that still exists in the database, and records the result in the
-// request context so downstream handlers don't need to query it again.
+// to a user that still exists in the database and whose password hasn't
+// changed since this session logged in. If so, the user's ID is recorded in
+// the request context so downstream handlers don't need to query it again.
 func (app *application) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Retrieve the authenticatedUserID value from the session using the
@@ -108,22 +112,28 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		// Otherwise, we check to see if a user with that ID exists in our
-		// database.
-		exists, err := app.users.Exists(id)
-		if err != nil {
+		// Otherwise, look up the user's current session version.
+		version, err := app.users.SessionVersion(id)
+		if err != nil && !errors.Is(err, models.ErrNoRecord) {
 			app.serverError(w, r, err)
 			return
 		}
 
-		// If a matching user is found, we know that the request is coming from
-		// an authenticated user who exists in our database. We create a new
-		// copy of the request (with an isAuthenticatedContextKey value of true
-		// in the request context) and assign it to r.
-		if exists {
-			ctx := context.WithValue(r.Context(), isAuthenticatedContextKey, true)
-			r = r.WithContext(ctx)
+		// If the user no longer exists, or their password has been changed
+		// since this session was created (so the versions differ), log the
+		// session out and carry on as an anonymous request.
+		if errors.Is(err, models.ErrNoRecord) || version != app.sessionManager.GetInt(r.Context(), "sessionVersion") {
+			app.sessionManager.Remove(r.Context(), "authenticatedUserID")
+			app.sessionManager.Remove(r.Context(), "sessionVersion")
+			next.ServeHTTP(w, r)
+			return
 		}
+
+		// We know the request is coming from an authenticated user who exists
+		// in our database. We create a new copy of the request with their ID
+		// in the request context and assign it to r.
+		ctx := context.WithValue(r.Context(), authenticatedUserIDContextKey, id)
+		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)
 	})

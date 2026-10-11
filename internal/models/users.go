@@ -15,7 +15,7 @@ import (
 type UserModelInterface interface {
 	Insert(name, email, password string) error
 	Authenticate(email, password string) (int, error)
-	Exists(id int) (bool, error)
+	SessionVersion(id int) (int, error)
 	Get(id int) (User, error)
 	PasswordUpdate(id int, currentPassword, newPassword string) error
 }
@@ -94,14 +94,24 @@ func (m *UserModel) Authenticate(email, password string) (int, error) {
 	return id, nil
 }
 
-// Exists checks whether a user exists with a specific ID.
-func (m *UserModel) Exists(id int) (bool, error) {
-	var exists bool
+// SessionVersion returns the user's current session version, or ErrNoRecord
+// if the user doesn't exist. The version is stored in the session at login
+// and bumped whenever the password changes, so comparing the two tells us
+// whether a session is still valid.
+func (m *UserModel) SessionVersion(id int) (int, error) {
+	var version int
 
-	stmt := "SELECT EXISTS(SELECT true FROM users WHERE id = ?)"
+	stmt := "SELECT session_version FROM users WHERE id = ?"
 
-	err := m.DB.QueryRow(stmt, id).Scan(&exists)
-	return exists, err
+	err := m.DB.QueryRow(stmt, id).Scan(&version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrNoRecord
+		}
+		return 0, err
+	}
+
+	return version, nil
 }
 
 // Get returns the details for a specific user (without the password hash).
@@ -123,7 +133,8 @@ func (m *UserModel) Get(id int) (User, error) {
 
 // PasswordUpdate changes a user's password, but only if currentPassword
 // matches the one we have stored. If it doesn't, ErrInvalidCredentials is
-// returned and nothing is changed.
+// returned and nothing is changed. A successful update also increments the
+// user's session version.
 func (m *UserModel) PasswordUpdate(id int, currentPassword, newPassword string) error {
 	var currentHashedPassword []byte
 
@@ -150,7 +161,9 @@ func (m *UserModel) PasswordUpdate(id int, currentPassword, newPassword string) 
 		return err
 	}
 
-	stmt = "UPDATE users SET hashed_password = ? WHERE id = ?"
+	// Bump the session version too, which logs out every other session that
+	// belongs to this user.
+	stmt = "UPDATE users SET hashed_password = ?, session_version = session_version + 1 WHERE id = ?"
 
 	_, err = m.DB.Exec(stmt, string(newHashedPassword), id)
 	return err

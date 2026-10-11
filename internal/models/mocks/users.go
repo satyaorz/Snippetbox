@@ -1,6 +1,7 @@
 package mocks
 
 import (
+	"sync"
 	"time"
 
 	"github.com/satyaorz/snippetbox/internal/models"
@@ -9,8 +10,14 @@ import (
 // UserModel is an in-memory stand-in for models.UserModel.
 //   - "dupe@example.com" is treated as already registered.
 //   - "alice@example.com" / "pa$$word" are valid credentials for user ID 1.
-//   - PasswordUpdate succeeds for user ID 1 when the current password is "pa$$word".
-type UserModel struct{}
+//   - PasswordUpdate succeeds for user ID 1 when the current password is
+//     "pa$$word", and bumps the session version just like the real model.
+type UserModel struct {
+	mu sync.Mutex
+	// versionBumps counts successful password changes; the session version
+	// is 1 + versionBumps.
+	versionBumps int
+}
 
 func (m *UserModel) Insert(name, email, password string) error {
 	switch email {
@@ -29,13 +36,14 @@ func (m *UserModel) Authenticate(email, password string) (int, error) {
 	return 0, models.ErrInvalidCredentials
 }
 
-func (m *UserModel) Exists(id int) (bool, error) {
-	switch id {
-	case 1:
-		return true, nil
-	default:
-		return false, nil
+func (m *UserModel) SessionVersion(id int) (int, error) {
+	if id != 1 {
+		return 0, models.ErrNoRecord
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return 1 + m.versionBumps, nil
 }
 
 func (m *UserModel) Get(id int) (models.User, error) {
@@ -52,12 +60,15 @@ func (m *UserModel) Get(id int) (models.User, error) {
 }
 
 func (m *UserModel) PasswordUpdate(id int, currentPassword, newPassword string) error {
-	if id == 1 {
-		if currentPassword != "pa$$word" {
-			return models.ErrInvalidCredentials
-		}
-		return nil
+	if id != 1 {
+		return models.ErrNoRecord
+	}
+	if currentPassword != "pa$$word" {
+		return models.ErrInvalidCredentials
 	}
 
-	return models.ErrNoRecord
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.versionBumps++
+	return nil
 }

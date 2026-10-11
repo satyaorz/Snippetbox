@@ -4,4 +4,7 @@ package main
 // set by third-party packages.
 type contextKey string
 
-const isAuthenticatedContextKey = contextKey("isAuthenticated")
+// authenticatedUserIDContextKey holds the ID (an int) of the logged-in user.
+// It's only set by the authenticate middleware once the session has been
+// checked against the database.
+const authenticatedUserIDContextKey = contextKey("authenticatedUserID")

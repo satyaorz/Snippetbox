@@ -1,0 +1,39 @@
+{{define "snippet-fields"}}
+<!-- Fields shared by the create and edit snippet forms. -->
+<div>
+    <label>Title:</label>
+    {{with .Form.FieldErrors.title}}
+    <label class='error'>{{.}}</label>
+    {{end}}
+    <input type='text' name='title' value='{{.Form.Title}}'>
+</div>
+<div>
+    <label>Content:</label>
+    {{with .Form.FieldErrors.content}}
+    <label class='error'>{{.}}</label>
+    {{end}}
+    <textarea name='content'>{{.Form.Content}}</textarea>
+</div>
+<div>
+    <label>Language:</label>
+    {{with .Form.FieldErrors.language}}
+    <label class='error'>{{.}}</label>
+    {{end}}
+    <select name='language'>
+        {{range languages}}
+        <option value='{{.Value}}' {{if eq $.Form.Language .Value}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+    </select>
+</div>
+<div>
+    <label>Visibility:</label>
+    {{with .Form.FieldErrors.visibility}}
+    <label class='error'>{{.}}</label>
+    {{end}}
+    <input type='radio' name='visibility' value='public' {{if eq .Form.Visibility "public"}}checked{{end}}> Public
+    <input type='radio' name='visibility' value='unlisted' {{if eq .Form.Visibility "unlisted"}}checked{{end}}> Unlisted
+    <input type='radio' name='visibility' value='private' {{if eq .Form.Visibility "private"}}checked{{end}}> Private
+    <p class='hint'>Unlisted snippets are hidden from the home page and search but anyone with the link can view them.
+        Private snippets are only visible to you.</p>
+</div>
+{{end}}

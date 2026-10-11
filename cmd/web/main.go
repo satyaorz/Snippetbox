@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"database/sql"
 	"flag"
@@ -15,6 +16,7 @@ import (
 	"github.com/alexedwards/scs/mysqlstore"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-playground/form/v4"
+	"golang.org/x/time/rate"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -30,6 +32,7 @@ type application struct {
 	templateCache  map[string]*template.Template
 	formDecoder    *form.Decoder
 	sessionManager *scs.SessionManager
+	authLimiter    *ipRateLimiter
 }
 
 func main() {
@@ -41,6 +44,8 @@ func main() {
 	// Debug mode shows detailed errors and stack traces in HTTP responses.
 	// Never enable it in production.
 	debug := flag.Bool("debug", false, "Enable debug mode")
+
+	cleanupInterval := flag.Duration("cleanup-interval", time.Hour, "How often to delete expired snippets")
 
 	flag.Parse()
 
@@ -83,7 +88,14 @@ func main() {
 		templateCache:  templateCache,
 		formDecoder:    formDecoder,
 		sessionManager: sessionManager,
+		// Allow each IP address a burst of 5 login/signup/password attempts,
+		// then one more every 12 seconds (5 per minute).
+		authLimiter: newIPRateLimiter(rate.Every(12*time.Second), 5),
 	}
+
+	// Periodically delete expired snippets in the background for as long as
+	// the server is running.
+	go app.cleanupExpiredSnippets(context.Background(), *cleanupInterval)
 
 	// the info() method t the log the staring server messgae at Info severity
 	// (along with the listen address as an attribute)

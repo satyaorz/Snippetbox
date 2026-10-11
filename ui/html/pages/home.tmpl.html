@@ -1,22 +1,41 @@
 {{define "title"}}Home{{end}}
 {{define "main"}}
+<form action='/' method='GET' class='search'>
+    <input type='search' name='q' value='{{.Search}}' placeholder='Search snippets'>
+    <input type='submit' value='Search'>
+</form>
+{{if .Search}}
+<h2>Results for “{{.Search}}”</h2>
+{{else}}
 <h2>Latest Snippets</h2>
+{{end}}
 {{if .Snippets}}
 <table>
     <tr>
         <th>Title</th>
+        <th>Author</th>
         <th>Created</th>
-        <th>ID</th>
     </tr>
     {{range .Snippets}}
     <tr>
-        <td><a href='/snippet/view/{{.ID}}'>{{.Title}}</a></td>
+        <td><a href='/snippet/view/{{.Slug}}'>{{.Title}}</a></td>
+        <td>{{if .AuthorName}}{{.AuthorName}}{{else}}anonymous{{end}}</td>
         <td>{{humanDate .Created}}</td>
-        <td>#{{.ID}}</td>
     </tr>
     {{end}}
 </table>
+{{else if .Search}}
+<p>No snippets matched your search.</p>
 {{else}}
 <p>There's nothing to see here... yet!</p>
+{{end}}
+{{with .Pagination}}
+{{if or .PrevURL .NextURL}}
+<nav class='pagination'>
+    {{if .PrevURL}}<a href='{{.PrevURL}}'>← Newer</a>{{end}}
+    <span>Page {{.Page}} of {{.LastPage}}</span>
+    {{if .NextURL}}<a href='{{.NextURL}}'>Older →</a>{{end}}
+</nav>
+{{end}}
 {{end}}
 {{end}}

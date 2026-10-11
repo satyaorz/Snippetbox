@@ -21,4 +21,24 @@
     </tr>
 </table>
 {{end}}
+
+<h2>Your Snippets</h2>
+{{if .Snippets}}
+<table>
+    <tr>
+        <th>Title</th>
+        <th>Visibility</th>
+        <th>Expires</th>
+    </tr>
+    {{range .Snippets}}
+    <tr>
+        <td><a href='/snippet/view/{{.Slug}}'>{{.Title}}</a></td>
+        <td>{{.Visibility}}</td>
+        <td>{{humanDate .Expires}}</td>
+    </tr>
+    {{end}}
+</table>
+{{else}}
+<p>You haven't created any snippets yet. <a href='/snippet/create'>Create one</a>.</p>
+{{end}}
 {{end}}

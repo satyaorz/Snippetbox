@@ -18,6 +18,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-playground/form/v4"
+	"golang.org/x/time/rate"
 )
 
 // newTestApplication returns an application wired up with mock models, an
@@ -41,12 +42,18 @@ func newTestApplication(t *testing.T) *application {
 		templateCache:  templateCache,
 		formDecoder:    form.NewDecoder(),
 		sessionManager: sessionManager,
+		// No rate limiting by default, so tests can submit forms freely.
+		// TestRateLimit swaps in a strict limiter.
+		authLimiter: newIPRateLimiter(rate.Inf, 1),
 	}
 }
 
 // testServer embeds an httptest.Server so we can add helper methods to it.
+// Each testServer value has its own client, and so its own cookies, which
+// lets a test act as several separate browser sessions (see newSession).
 type testServer struct {
 	*httptest.Server
+	client *http.Client
 }
 
 // newTestServer starts an HTTPS test server for the given handler. Its client
@@ -56,20 +63,35 @@ func newTestServer(t *testing.T, h http.Handler) *testServer {
 	t.Helper()
 
 	ts := httptest.NewTLSServer(h)
+	t.Cleanup(ts.Close)
+
+	return &testServer{Server: ts, client: newTestClient(t, ts)}
+}
+
+// newSession returns a view of the same server with a fresh cookie jar, as if
+// the requests came from a different browser.
+func (ts *testServer) newSession(t *testing.T) *testServer {
+	t.Helper()
+
+	return &testServer{Server: ts.Server, client: newTestClient(t, ts.Server)}
+}
+
+func newTestClient(t *testing.T, ts *httptest.Server) *http.Client {
+	t.Helper()
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts.Client().Jar = jar
 
-	ts.Client().CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		return http.ErrUseLastResponse
+	return &http.Client{
+		// Reuse the test server's transport, which trusts its TLS certificate.
+		Transport: ts.Client().Transport,
+		Jar:       jar,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
-
-	t.Cleanup(ts.Close)
-
-	return &testServer{ts}
 }
 
 type testResponse struct {
@@ -110,7 +132,7 @@ func (ts *testServer) postForm(t *testing.T, urlPath string, form url.Values) te
 func (ts *testServer) do(t *testing.T, req *http.Request) testResponse {
 	t.Helper()
 
-	res, err := ts.Client().Do(req)
+	res, err := ts.client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +151,7 @@ func (ts *testServer) do(t *testing.T, req *http.Request) testResponse {
 	}
 }
 
-var csrfTokenRX = regexp.MustCompile(`<input type='hidden' name='csrf_token' value='(.+)'>`)
+var csrfTokenRX = regexp.MustCompile(`<input type='hidden' name='csrf_token' value='(.+?)'>`)
 
 // extractCSRFToken pulls the CSRF token out of a rendered HTML page. The
 // token is HTML-escaped by html/template (e.g. "+" becomes "&#43;"), so we
@@ -162,4 +184,15 @@ func (ts *testServer) login(t *testing.T) testResponse {
 	}
 
 	return res
+}
+
+// postWithCSRF loads formPage to pick up a CSRF token, then posts form (plus
+// the token) to urlPath.
+func (ts *testServer) postWithCSRF(t *testing.T, formPage, urlPath string, form url.Values) testResponse {
+	t.Helper()
+
+	res := ts.get(t, formPage)
+	form.Set("csrf_token", extractCSRFToken(t, res.body))
+
+	return ts.postForm(t, urlPath, form)
 }

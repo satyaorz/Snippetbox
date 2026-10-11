@@ -311,3 +311,73 @@ footer {
     color: #6A6C6F;
     text-align: center;
 }
+
+h2 + table, table + h2 {
+    margin-top: 18px;
+}
+
+table + h2 {
+    margin-top: 54px;
+}
+
+select {
+    font-size: 18px;
+    font-family: "Ubuntu Mono", monospace;
+    padding: 0.5em 12px;
+    color: #6A6C6F;
+    background: #FFFFFF;
+    border: 1px solid #E4E5E7;
+    border-radius: 3px;
+}
+
+.hint {
+    color: #6A6C6F;
+    font-size: 14px;
+    margin-top: 9px;
+}
+
+form.search {
+    display: flex;
+    gap: 9px;
+    margin-bottom: 36px;
+}
+
+form.search input[type="search"] {
+    flex: 1;
+    padding: 0.5em 18px;
+    color: #6A6C6F;
+    border: 1px solid #E4E5E7;
+    border-radius: 3px;
+}
+
+nav.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: auto;
+    margin-top: 18px;
+    padding: 9px 18px;
+    border: 1px solid #E4E5E7;
+}
+
+.snippet pre.chroma {
+    margin: 0;
+    overflow-x: auto;
+}
+
+.snippet-actions {
+    margin-top: 18px;
+    color: #6A6C6F;
+}
+
+.snippet-actions > * {
+    margin-right: 1.5em;
+}
+
+.snippet-actions form {
+    display: inline-block;
+}
+
+button.danger {
+    color: #C0392B;
+}

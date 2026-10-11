@@ -17,6 +17,11 @@ func (app *application) routes() http.Handler {
 	// directly onto them without needing to strip a prefix.
 	mux.Handle("GET /static/", http.FileServerFS(ui.Files))
 
+	// The syntax highlighting stylesheet is generated from the chroma style,
+	// so it's served by a handler rather than from ui/static. This pattern is
+	// more specific than "GET /static/", so it takes precedence.
+	mux.HandleFunc("GET /static/css/syntax.css", app.syntaxCSSHandler)
+
 	// A simple health-check endpoint that doesn't need any middleware.
 	mux.HandleFunc("GET /ping", ping)
 
@@ -28,11 +33,17 @@ func (app *application) routes() http.Handler {
 	// Unprotected application routes using the "dynamic" middleware chain.
 	mux.Handle("GET /{$}", dynamic.ThenFunc(app.home))
 	mux.Handle("GET /about", dynamic.ThenFunc(app.about))
-	mux.Handle("GET /snippet/view/{id}", dynamic.ThenFunc(app.snippetView))
+	mux.Handle("GET /snippet/view/{slug}", dynamic.ThenFunc(app.snippetView))
+	mux.Handle("GET /snippet/raw/{slug}", dynamic.ThenFunc(app.snippetRaw))
 	mux.Handle("GET /user/signup", dynamic.ThenFunc(app.userSignup))
-	mux.Handle("POST /user/signup", dynamic.ThenFunc(app.userSignupPost))
 	mux.Handle("GET /user/login", dynamic.ThenFunc(app.userLogin))
-	mux.Handle("POST /user/login", dynamic.ThenFunc(app.userLoginPost))
+
+	// Form submissions that check a password are rate limited per IP address
+	// to slow down brute-force attacks.
+	limited := dynamic.Append(app.limitAuthAttempts)
+
+	mux.Handle("POST /user/signup", limited.ThenFunc(app.userSignupPost))
+	mux.Handle("POST /user/login", limited.ThenFunc(app.userLoginPost))
 
 	// Protected (authenticated-only) application routes, using a new "protected"
 	// middleware chain which includes the requireAuthentication middleware.
@@ -40,10 +51,13 @@ func (app *application) routes() http.Handler {
 
 	mux.Handle("GET /snippet/create", protected.ThenFunc(app.snippetCreate))
 	mux.Handle("POST /snippet/create", protected.ThenFunc(app.snippetCreatePost))
+	mux.Handle("GET /snippet/edit/{slug}", protected.ThenFunc(app.snippetEdit))
+	mux.Handle("POST /snippet/edit/{slug}", protected.ThenFunc(app.snippetEditPost))
+	mux.Handle("POST /snippet/delete/{slug}", protected.ThenFunc(app.snippetDeletePost))
 	mux.Handle("POST /user/logout", protected.ThenFunc(app.userLogoutPost))
 	mux.Handle("GET /account/view", protected.ThenFunc(app.accountView))
 	mux.Handle("GET /account/password/update", protected.ThenFunc(app.accountPasswordUpdate))
-	mux.Handle("POST /account/password/update", protected.ThenFunc(app.accountPasswordUpdatePost))
+	mux.Handle("POST /account/password/update", protected.Append(app.limitAuthAttempts).ThenFunc(app.accountPasswordUpdatePost))
 
 	// The "standard" middleware chain which is used for every request.
 	standard := alice.New(app.recoverPanic, app.logRequest, commonHeaders)

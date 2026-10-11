@@ -1,16 +1,29 @@
-{{define "title"}}Snippet #{{.Snippet.ID}}{{end}}
+{{define "title"}}{{.Snippet.Title}}{{end}}
 {{define "main"}}
 {{with .Snippet}}
 <div class='snippet'>
     <div class='metadata'>
         <strong>{{.Title}}</strong>
-        <span>#{{.ID}}</span>
+        <span>{{languageName .Language}}{{if ne .Visibility "public"}} · {{.Visibility}}{{end}}</span>
     </div>
-    <pre><code>{{.Content}}</code></pre>
+    <!-- highlight returns HTML that chroma has already escaped -->
+    {{highlight .Content .Language}}
     <div class='metadata'>
         <time>Created: {{humanDate .Created}}</time>
         <time>Expires: {{humanDate .Expires}}</time>
     </div>
+</div>
+<div class='snippet-actions'>
+    <span>by {{if .AuthorName}}{{.AuthorName}}{{else}}anonymous{{end}}</span>
+    <a href='/snippet/raw/{{.Slug}}'>Raw</a>
+    <!-- Only the owner sees the edit and delete controls -->
+    {{if and .UserID (eq .UserID $.AuthenticatedUserID)}}
+    <a href='/snippet/edit/{{.Slug}}'>Edit</a>
+    <form action='/snippet/delete/{{.Slug}}' method='POST' data-confirm='Delete this snippet? This cannot be undone.'>
+        <input type='hidden' name='csrf_token' value='{{$.CSRFToken}}'>
+        <button class='danger'>Delete</button>
+    </form>
+    {{end}}
 </div>
 {{end}}
 {{end}}

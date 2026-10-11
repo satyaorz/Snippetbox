@@ -8,6 +8,8 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/satyaorz/snippetbox/internal/models"
+
 	"github.com/go-playground/form/v4"
 	"github.com/justinas/nosurf"
 )
@@ -38,7 +40,7 @@ func (app *application) render(w http.ResponseWriter, r *http.Request, status in
 	ts, ok := app.templateCache[page]
 
 	if !ok {
-		err := fmt.Errorf("the themplate %s does not exist", page)
+		err := fmt.Errorf("the template %s does not exist", page)
 		app.serverError(w, r, err)
 		return
 	}
@@ -90,22 +92,34 @@ func (app *application) newTemplateData(r *http.Request) templateData {
 		CurrentYear: time.Now().Year(),
 		// Retrieve the "flash" value from the session (and remove it) so it
 		// is only ever shown once.
-		Flash:           app.sessionManager.PopString(r.Context(), "flash"),
-		IsAuthenticated: app.isAuthenticated(r),
-		CSRFToken:       nosurf.Token(r),
+		Flash:               app.sessionManager.PopString(r.Context(), "flash"),
+		IsAuthenticated:     app.isAuthenticated(r),
+		AuthenticatedUserID: app.authenticatedUserID(r),
+		CSRFToken:           nosurf.Token(r),
 	}
+}
+
+// authenticatedUserID returns the ID of the logged-in user making the
+// request, or 0 if the request is unauthenticated. The value is set by the
+// authenticate middleware; if it's missing (or isn't an int), the type
+// assertion fails and we treat the request as unauthenticated.
+func (app *application) authenticatedUserID(r *http.Request) int {
+	id, ok := r.Context().Value(authenticatedUserIDContextKey).(int)
+	if !ok {
+		return 0
+	}
+
+	return id
 }
 
 // isAuthenticated returns true if the current request is from an
 // authenticated user, otherwise false.
 func (app *application) isAuthenticated(r *http.Request) bool {
-	// The value is set by the authenticate middleware. If it's missing (or
-	// isn't a bool), the type assertion fails and we treat the request as
-	// unauthenticated.
-	isAuthenticated, ok := r.Context().Value(isAuthenticatedContextKey).(bool)
-	if !ok {
-		return false
-	}
+	return app.authenticatedUserID(r) != 0
+}
 
-	return isAuthenticated
+// isOwner reports whether the current user owns the snippet. Anonymous
+// snippets (UserID 0) have no owner.
+func (app *application) isOwner(r *http.Request, snippet models.Snippet) bool {
+	return snippet.UserID != 0 && snippet.UserID == app.authenticatedUserID(r)
 }

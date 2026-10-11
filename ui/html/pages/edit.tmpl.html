@@ -1,0 +1,12 @@
+{{define "title"}}Edit Snippet{{end}}
+{{define "main"}}
+<h2>Edit snippet</h2>
+<form action='/snippet/edit/{{.Snippet.Slug}}' method='POST'>
+    <input type='hidden' name='csrf_token' value='{{.CSRFToken}}'>
+    {{template "snippet-fields" .}}
+    <div>
+        <input type='submit' value='Save changes'>
+        <a href='/snippet/view/{{.Snippet.Slug}}'>Cancel</a>
+    </div>
+</form>
+{{end}}

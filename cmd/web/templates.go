@@ -3,7 +3,9 @@ package main
 import (
 	"html/template"
 	"io/fs"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/satyaorz/snippetbox/internal/models"
@@ -11,14 +13,59 @@ import (
 )
 
 type templateData struct {
-	CurrentYear     int
-	Snippet         models.Snippet
-	Snippets        []models.Snippet
-	User            models.User
-	Form            any
-	Flash           string
-	IsAuthenticated bool
-	CSRFToken       string
+	CurrentYear         int
+	Snippet             models.Snippet
+	Snippets            []models.Snippet
+	User                models.User
+	Form                any
+	Flash               string
+	IsAuthenticated     bool
+	AuthenticatedUserID int
+	CSRFToken           string
+	Search              string
+	Pagination          pagination
+}
+
+// pagination holds the links for moving between pages of a listing.
+type pagination struct {
+	Page     int
+	LastPage int
+	PrevURL  string
+	NextURL  string
+}
+
+// newPagination works out the previous/next links for a listing, keeping any
+// search term in the URLs. A link is left empty when there's no such page.
+func newPagination(query string, page, pageSize, total int) pagination {
+	p := pagination{
+		Page:     page,
+		LastPage: max(1, (total+pageSize-1)/pageSize),
+	}
+
+	pageURL := func(n int) string {
+		v := url.Values{}
+		if query != "" {
+			v.Set("q", query)
+		}
+		if n > 1 {
+			v.Set("page", strconv.Itoa(n))
+		}
+		if len(v) == 0 {
+			return "/"
+		}
+		return "/?" + v.Encode()
+	}
+
+	if page > 1 {
+		// If someone asks for a page past the end, "previous" takes them back
+		// to the last page that actually has results.
+		p.PrevURL = pageURL(min(page-1, p.LastPage))
+	}
+	if page < p.LastPage {
+		p.NextURL = pageURL(page + 1)
+	}
+
+	return p
 }
 
 func humanDate(t time.Time) string {
@@ -29,7 +76,10 @@ func humanDate(t time.Time) string {
 }
 
 var functions = template.FuncMap{
-	"humanDate": humanDate,
+	"humanDate":    humanDate,
+	"highlight":    highlight,
+	"languages":    func() []language { return languages },
+	"languageName": languageName,
 }
 
 func newTemplateCache() (map[string]*template.Template, error) {
