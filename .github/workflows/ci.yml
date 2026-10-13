@@ -42,6 +42,9 @@ jobs:
           # Latest 1.26 patch release, so security fixes in the standard
           # library are picked up (govulncheck fails on older patches).
           go-version: "1.26.x"
+          # Without this, setup-go uses whatever 1.26 release is cached on
+          # the runner, which can lag behind the latest security patch.
+          check-latest: true
 
       - name: Check formatting
         run: |
