@@ -28,7 +28,7 @@ func (app *application) routes() http.Handler {
 	// Create a new middleware chain containing the middleware specific to our
 	// dynamic application routes: session loading/saving, CSRF protection and
 	// authentication. The static file route doesn't need any of these.
-	dynamic := alice.New(app.sessionManager.LoadAndSave, noSurf, app.authenticate)
+	dynamic := alice.New(app.sessionManager.LoadAndSave, app.noSurf, app.authenticate)
 
 	// Unprotected application routes using the "dynamic" middleware chain.
 	mux.Handle("GET /{$}", dynamic.ThenFunc(app.home))
@@ -59,8 +59,10 @@ func (app *application) routes() http.Handler {
 	mux.Handle("GET /account/password/update", protected.ThenFunc(app.accountPasswordUpdate))
 	mux.Handle("POST /account/password/update", protected.Append(app.limitAuthAttempts).ThenFunc(app.accountPasswordUpdatePost))
 
-	// The "standard" middleware chain which is used for every request.
-	standard := alice.New(app.recoverPanic, app.logRequest, commonHeaders)
+	// The "standard" middleware chain which is used for every request. The
+	// request ID comes first so every log line can include it, and
+	// recoverPanic sits inside logRequest so a panic is logged as a 500.
+	standard := alice.New(app.requestID, app.logRequest, app.recoverPanic, commonHeaders)
 
 	return standard.Then(mux)
 }

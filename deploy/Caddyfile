@@ -1,0 +1,10 @@
+# Reverse proxy for the docker-compose stack. For a real deployment replace
+# the site address with your domain and Caddy will get a Let's Encrypt
+# certificate automatically.
+localhost:8443 {
+	# Caddy sets X-Forwarded-For and X-Forwarded-Proto, which the app trusts
+	# because it runs with -behind-proxy.
+	reverse_proxy app:4000 {
+		header_up X-Request-Id {http.request.uuid}
+	}
+}

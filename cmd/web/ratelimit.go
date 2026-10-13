@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -78,16 +77,11 @@ func (l *ipRateLimiter) retryAfter() string {
 }
 
 // limitAuthAttempts rejects requests with 429 Too Many Requests once a client
-// IP has used up its allowance. Note that r.RemoteAddr is the address of the
-// direct peer: behind a reverse proxy every request would share one bucket.
+// IP has used up its allowance. Run with -behind-proxy when there's a reverse
+// proxy in front, or every request would share the proxy's bucket.
 func (app *application) limitAuthAttempts(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			ip = r.RemoteAddr
-		}
-
-		if !app.authLimiter.allow(ip) {
+		if !app.authLimiter.allow(app.clientIP(r)) {
 			w.Header().Set("Retry-After", app.authLimiter.retryAfter())
 			app.clientError(w, http.StatusTooManyRequests)
 			return

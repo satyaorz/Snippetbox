@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -549,4 +550,43 @@ func TestSyntaxCSS(t *testing.T) {
 
 	// Other static files are still served from the embedded filesystem.
 	assert.Equal(t, ts.get(t, "/static/css/main.css").status, http.StatusOK)
+}
+
+func TestBehindProxyCSRF(t *testing.T) {
+	// Simulate -tls=off -behind-proxy: the app speaks plain HTTP, and a proxy
+	// in front terminates TLS and sets X-Forwarded-Proto/-For.
+	app := newTestApplication(t)
+	app.config.tlsMode = "off"
+	app.config.behindProxy = true
+
+	srv := httptest.NewServer(app.routes())
+	t.Cleanup(srv.Close)
+	ts := &testServer{Server: srv, client: newTestClient(t, srv)}
+
+	res := ts.get(t, "/user/login")
+	token := extractCSRFToken(t, res.body)
+
+	post := func(proto, origin string) int {
+		form := url.Values{}
+		form.Add("email", "alice@example.com")
+		form.Add("password", "pa$$word")
+		form.Add("csrf_token", token)
+
+		req, err := http.NewRequest(http.MethodPost, srv.URL+"/user/login", strings.NewReader(form.Encode()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Forwarded-Proto", proto)
+		req.Header.Set("Origin", origin)
+
+		return ts.do(t, req).status
+	}
+
+	httpsOrigin := strings.Replace(srv.URL, "http://", "https://", 1)
+
+	// The browser is on https:// (via the proxy), so its Origin is https://.
+	assert.Equal(t, post("https", httpsOrigin), http.StatusSeeOther)
+	// A cross-site origin is still rejected.
+	assert.Equal(t, post("https", "https://evil.example.com"), http.StatusBadRequest)
 }

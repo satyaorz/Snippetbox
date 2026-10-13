@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"regexp"
+	"strings"
+	"time"
 
 	"github.com/satyaorz/snippetbox/internal/models"
 
@@ -42,19 +48,111 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 	})
 }
 
+// requestIDPattern limits which incoming X-Request-Id values we accept from a
+// proxy, so a client can't inject arbitrary text into our logs.
+var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+
+// requestID gives every request an ID, returned in the X-Request-Id response
+// header and attached to its log entries, so a user-reported error can be
+// matched to the logs. Behind a trusted proxy we reuse the proxy's ID.
+func (app *application) requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-Id")
+		if !app.config.behindProxy || !requestIDPattern.MatchString(id) {
+			b := make([]byte, 8)
+			rand.Read(b)
+			id = hex.EncodeToString(b)
+		}
+
+		w.Header().Set("X-Request-Id", id)
+
+		ctx := context.WithValue(r.Context(), requestIDContextKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// statusRecorder wraps a http.ResponseWriter to remember the status code and
+// number of bytes written, for logging.
+type statusRecorder struct {
+	http.ResponseWriter
+	status      int
+	size        int
+	wroteHeader bool
+}
+
+func (sr *statusRecorder) WriteHeader(status int) {
+	if !sr.wroteHeader {
+		sr.status = status
+		sr.wroteHeader = true
+	}
+	sr.ResponseWriter.WriteHeader(status)
+}
+
+func (sr *statusRecorder) Write(b []byte) (int, error) {
+	if !sr.wroteHeader {
+		sr.WriteHeader(http.StatusOK)
+	}
+	n, err := sr.ResponseWriter.Write(b)
+	sr.size += n
+	return n, err
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (sr *statusRecorder) Unwrap() http.ResponseWriter {
+	return sr.ResponseWriter
+}
+
+// logRequest logs one line per request once the response has been sent,
+// including the status code, response size and how long it took, and updates
+// the request metrics.
 func (app *application) logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var (
-			ip     = r.RemoteAddr
-			proto  = r.Proto
-			method = r.Method
-			uri    = r.URL.RequestURI()
+		start := time.Now()
+		metricRequestsReceived.Add(1)
+
+		sr := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(sr, r)
+
+		duration := time.Since(start)
+		recordResponse(sr.status, duration)
+
+		app.logger.Info("request",
+			"request_id", requestIDFrom(r),
+			"ip", app.clientIP(r),
+			"proto", r.Proto,
+			"method", r.Method,
+			"uri", r.URL.RequestURI(),
+			"status", sr.status,
+			"size", sr.size,
+			"duration", duration.String(),
 		)
-
-		app.logger.Info("received request", "ip", ip, "proto", proto, "method", method, "uri", uri)
-
-		next.ServeHTTP(w, r)
 	})
+}
+
+// requestIDFrom returns the ID set by the requestID middleware, if any.
+func requestIDFrom(r *http.Request) string {
+	id, _ := r.Context().Value(requestIDContextKey).(string)
+	return id
+}
+
+// clientIP returns the IP address of the client. Normally that's the address
+// of the TCP peer, but behind a trusted proxy it's the last address in
+// X-Forwarded-For: the one the proxy itself appended. (Entries further left
+// were supplied by the client and can't be trusted.)
+func (app *application) clientIP(r *http.Request) string {
+	if app.config.behindProxy {
+		xff := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
+		parts := strings.Split(xff, ",")
+		if last := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(last) != nil {
+			return last
+		}
+	}
+
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
 }
 
 // requireAuthentication redirects unauthenticated users to the login page.
@@ -85,12 +183,27 @@ func (app *application) requireAuthentication(next http.Handler) http.Handler {
 
 // noSurf uses a customized CSRF cookie with the Secure, Path and HttpOnly
 // attributes set.
-func noSurf(next http.Handler) http.Handler {
+func (app *application) noSurf(next http.Handler) http.Handler {
 	csrfHandler := nosurf.New(next)
 	csrfHandler.SetBaseCookie(http.Cookie{
 		HttpOnly: true,
 		Path:     "/",
 		Secure:   true,
+	})
+
+	// nosurf checks that the Origin (or Referer) of a form submission matches
+	// this site, so it needs to know whether the browser is using HTTPS.
+	// With -tls=off the connection to us is plain HTTP; behind a proxy we
+	// believe its X-Forwarded-Proto header.
+	csrfHandler.SetIsTLSFunc(func(r *http.Request) bool {
+		switch {
+		case app.config.tlsMode != "off":
+			return true
+		case app.config.behindProxy:
+			return r.Header.Get("X-Forwarded-Proto") == "https"
+		default:
+			return false
+		}
 	})
 
 	return csrfHandler

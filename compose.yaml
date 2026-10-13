@@ -1,0 +1,62 @@
+# Local production-like stack:  docker compose up --build
+# then open https://localhost:8443 (Caddy's local CA signs the certificate,
+# so your browser will warn until you trust it).
+
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: snippetbox
+    volumes:
+      - db-data:/var/lib/mysql
+      # Creates the app's read/write-only user on first start.
+      - ./deploy/mysql-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Applies pending migrations, then exits. The app waits for it to succeed.
+  migrate:
+    build: .
+    entrypoint: ["/app/migrate"]
+    command: ["up"]
+    environment:
+      SNIPPETBOX_MIGRATE_DSN: root:rootpass@tcp(db:3306)/snippetbox
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    environment:
+      SNIPPETBOX_DSN: web:pass@tcp(db:3306)/snippetbox?parseTime=true
+      # Caddy terminates TLS and forwards plain HTTP to the app.
+      SNIPPETBOX_TLS: "off"
+      SNIPPETBOX_BEHIND_PROXY: "true"
+      SNIPPETBOX_LOG_FORMAT: json
+      SNIPPETBOX_METRICS_ADDR: ":4001"
+    # The metrics server is only reachable from the host, never via Caddy.
+    ports:
+      - "127.0.0.1:4001:4001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  caddy-data:

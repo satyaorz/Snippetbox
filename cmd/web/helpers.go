@@ -25,9 +25,9 @@ func (app *application) serverError(w http.ResponseWriter, r *http.Request, err 
 		trace  = string(debug.Stack())
 	)
 
-	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
+	app.logger.Error(err.Error(), "request_id", requestIDFrom(r), "method", method, "uri", uri, "trace", trace)
 
-	if app.debug {
+	if app.config.debug {
 		body := fmt.Sprintf("%s\n%s", err, trace)
 		http.Error(w, body, http.StatusInternalServerError)
 		return

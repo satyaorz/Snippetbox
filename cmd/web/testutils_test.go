@@ -36,6 +36,8 @@ func newTestApplication(t *testing.T) *application {
 	sessionManager.Cookie.Secure = true
 
 	return &application{
+		// The test server speaks HTTPS, like the default -tls=file mode.
+		config:         config{tlsMode: "file"},
 		logger:         slog.New(slog.DiscardHandler),
 		snippets:       &mocks.SnippetModel{},
 		users:          &mocks.UserModel{},

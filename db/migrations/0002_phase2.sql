@@ -1,7 +1,5 @@
--- Upgrades a database created from the original schema to Phase 2:
--- snippet ownership, random slugs, visibility, languages, full-text search
--- and per-user session versions.
--- Run once as a privileged user:  mysql -uroot snippetbox < db/migrations/001_phase2.sql
+-- Phase 2: snippet ownership, random slugs, visibility, languages,
+-- full-text search and per-user session versions.
 
 ALTER TABLE users
     ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1;

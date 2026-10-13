@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
-	"flag"
+	"fmt"
 	"html/template"
 	"log/slog"
-	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/satyaorz/snippetbox/internal/models"
@@ -21,11 +22,10 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// an application struct to hold the application-wide dependencies for the
-// web application. For now we'll only include the stuctured logger, but we'll
-// add mroe to this as the uild progresses.
+// application holds the application-wide dependencies for the web
+// application, so handlers and middleware can use them as methods.
 type application struct {
-	debug          bool
+	config         config
 	logger         *slog.Logger
 	snippets       models.SnippetModelInterface
 	users          models.UserModelInterface
@@ -36,98 +36,91 @@ type application struct {
 }
 
 func main() {
-	// Define a new command-line flag with the name "addr", a default value of ":4000"
-	addr := flag.String("addr", ":4000", "HTTP network address")
+	cfg, err := parseConfig(os.Args[1:], defaultGetenv, os.Stderr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 
-	dsn := flag.String("dsn", "web:pass@/snippetbox?parseTime=true", "MySQL data source name")
+	if cfg.version {
+		fmt.Println(version())
+		return
+	}
 
-	// Debug mode shows detailed errors and stack traces in HTTP responses.
-	// Never enable it in production.
-	debug := flag.Bool("debug", false, "Enable debug mode")
+	logger := newLogger(cfg, os.Stdout)
 
-	cleanupInterval := flag.Duration("cleanup-interval", time.Hour, "How often to delete expired snippets")
-
-	flag.Parse()
-
-	// the slog.New() function to initialize a new stuctured logger, which
-	// writes to the standard out stream and uses the default settings.
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
-	db, err := openDB(*dsn)
+	err = run(cfg, logger)
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
+}
 
+// run wires up the application and serves it until it receives SIGINT or
+// SIGTERM, then shuts down gracefully.
+func run(cfg config, logger *slog.Logger) error {
+	db, err := openDB(cfg.dsn)
+	if err != nil {
+		return err
+	}
 	defer db.Close()
 
 	templateCache, err := newTemplateCache()
 	if err != nil {
-		logger.Error(err.Error())
-		os.Exit(1)
+		return err
 	}
-
-	formDecoder := form.NewDecoder()
 
 	// Use the scs.New() function to initialize a new session manager. Then we
 	// configure it to use our MySQL database as the session store, and set a
 	// lifetime of 12 hours (so that sessions automatically expire 12 hours
 	// after first being created).
+	sessionStore := mysqlstore.New(db)
+	defer sessionStore.StopCleanup()
+
 	sessionManager := scs.New()
-	sessionManager.Store = mysqlstore.New(db)
+	sessionManager.Store = sessionStore
 	sessionManager.Lifetime = 12 * time.Hour
 	// Make sure that the Secure attribute is set on our session cookies, so
-	// they are only ever sent over an HTTPS connection.
+	// they are only ever sent over an HTTPS connection. (Behind a proxy the
+	// browser still talks HTTPS to the proxy, so this stays on.)
 	sessionManager.Cookie.Secure = true
 
 	app := &application{
-		debug:          *debug,
+		config:         cfg,
 		logger:         logger,
 		snippets:       &models.SnippetModel{DB: db},
 		users:          &models.UserModel{DB: db},
 		templateCache:  templateCache,
-		formDecoder:    formDecoder,
+		formDecoder:    form.NewDecoder(),
 		sessionManager: sessionManager,
 		// Allow each IP address a burst of 5 login/signup/password attempts,
 		// then one more every 12 seconds (5 per minute).
 		authLimiter: newIPRateLimiter(rate.Every(12*time.Second), 5),
 	}
 
-	// Periodically delete expired snippets in the background for as long as
-	// the server is running.
-	go app.cleanupExpiredSnippets(context.Background(), *cleanupInterval)
-
-	// the info() method t the log the staring server messgae at Info severity
-	// (along with the listen address as an attribute)
-	logger.Info("Starting server", slog.Any("addr", *addr))
-
-	// Only use elliptic curves with assembly implementations, which perform
-	// better under heavy load.
-	tlsConfig := &tls.Config{
-		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+	if cfg.tlsMode == "off" && !cfg.behindProxy {
+		logger.Warn("serving plain HTTP without -behind-proxy: secure session cookies only work on localhost")
 	}
 
-	// Initialize a new http.Server struct so we can use our structured logger
-	// for server errors and set sensible timeouts.
-	srv := &http.Server{
-		Addr:    *addr,
-		Handler: app.routes(),
-		// Route any log entries from the server through our structured logger
-		// at Error level.
-		ErrorLog:  slog.NewLogLogger(logger.Handler(), slog.LevelError),
-		TLSConfig: tlsConfig,
-		// Close keep-alive connections after one minute of inactivity, and
-		// protect against slow-client attacks with read/write timeouts.
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
+	publishRuntimeMetrics(db)
 
-	// Use ListenAndServeTLS() to start the HTTPS server, passing in the paths
-	// to the TLS certificate and corresponding private key.
-	err = srv.ListenAndServeTLS("./tls/cert.pem", "./tls/key.pem")
-	logger.Error(err.Error())
-	os.Exit(1)
+	// ctx is cancelled when the process receives SIGINT (Ctrl+C) or SIGTERM
+	// (e.g. `docker stop`), which starts the graceful shutdown.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Periodically delete expired snippets in the background until shutdown.
+	var wg sync.WaitGroup
+	wg.Go(func() { app.cleanupExpiredSnippets(ctx, cfg.cleanupInterval) })
+
+	err = app.runServers(ctx, cfg.shutdownTimeout, app.buildServers(cfg, metricsRoutes(db))...)
+
+	// If a server failed (rather than us being signalled), stop the background
+	// job too, and wait for it before closing the database.
+	stop()
+	wg.Wait()
+
+	return err
 }
 
 func openDB(dsn string) (*sql.DB, error) {
@@ -135,7 +128,11 @@ func openDB(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = db.Ping()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = db.PingContext(ctx)
 	if err != nil {
 		db.Close()
 		return nil, err

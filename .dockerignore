@@ -1,0 +1,5 @@
+.git
+.github
+tls
+autocert-cache
+*.md
