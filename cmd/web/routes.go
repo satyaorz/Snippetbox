@@ -59,6 +59,22 @@ func (app *application) routes() http.Handler {
 	mux.Handle("GET /account/password/update", protected.ThenFunc(app.accountPasswordUpdate))
 	mux.Handle("POST /account/password/update", protected.Append(app.limitAuthAttempts).ThenFunc(app.accountPasswordUpdatePost))
 
+	// JSON API routes. These are stateless: no session cookies, so no CSRF
+	// protection is needed. Clients authenticate with a bearer token instead.
+	api := alice.New(app.authenticateToken)
+	apiAuth := api.Append(app.requireToken)
+
+	mux.Handle("GET /api/v1/languages", api.ThenFunc(app.apiLanguages))
+	mux.Handle("POST /api/v1/tokens", api.Append(app.limitAuthAttempts).ThenFunc(app.apiCreateToken))
+	mux.Handle("DELETE /api/v1/tokens/current", apiAuth.ThenFunc(app.apiRevokeToken))
+	mux.Handle("GET /api/v1/me", apiAuth.ThenFunc(app.apiMe))
+	mux.Handle("GET /api/v1/me/snippets", apiAuth.ThenFunc(app.apiMySnippets))
+	mux.Handle("GET /api/v1/snippets", api.ThenFunc(app.apiListSnippets))
+	mux.Handle("POST /api/v1/snippets", apiAuth.ThenFunc(app.apiCreateSnippet))
+	mux.Handle("GET /api/v1/snippets/{slug}", api.ThenFunc(app.apiShowSnippet))
+	mux.Handle("PATCH /api/v1/snippets/{slug}", apiAuth.ThenFunc(app.apiUpdateSnippet))
+	mux.Handle("DELETE /api/v1/snippets/{slug}", apiAuth.ThenFunc(app.apiDeleteSnippet))
+
 	// The "standard" middleware chain which is used for every request. The
 	// request ID comes first so every log line can include it, and
 	// recoverPanic sits inside logRequest so a panic is logged as a 500.

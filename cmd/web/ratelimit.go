@@ -83,7 +83,11 @@ func (app *application) limitAuthAttempts(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !app.authLimiter.allow(app.clientIP(r)) {
 			w.Header().Set("Retry-After", app.authLimiter.retryAfter())
-			app.clientError(w, http.StatusTooManyRequests)
+			if isAPIRequest(r) {
+				app.apiError(w, r, http.StatusTooManyRequests, "too many attempts, please try again later")
+			} else {
+				app.clientError(w, http.StatusTooManyRequests)
+			}
 			return
 		}
 

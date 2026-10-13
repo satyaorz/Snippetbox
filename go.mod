@@ -11,6 +11,7 @@ require (
 	github.com/justinas/alice v1.2.0
 	github.com/justinas/nosurf v1.2.0
 	golang.org/x/crypto v0.58.0
+	golang.org/x/term v0.47.0
 	golang.org/x/time v0.16.0
 )
 
@@ -18,5 +19,6 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

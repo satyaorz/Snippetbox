@@ -15,6 +15,7 @@ UI, so the compiled binary is self-contained.
 - Changing your password logs out your other sessions
 - Rate limiting on login, signup and change password (per IP)
 - Expired snippets are deleted automatically in the background
+- A JSON API with bearer-token authentication, and the `snip` command-line client
 
 ## Requirements
 - Go 1.26+
@@ -119,17 +120,74 @@ Route pattern                   | Handler                   | Action
 `GET /account/password/update`  | accountPasswordUpdate     | Display the change password form 🔒
 `POST /account/password/update` | accountPasswordUpdatePost | Change the user's password 🔒 ⏱
 `GET /ping`                     | ping                      | Health check (returns `OK`)
+`/api/v1/...`                   | see [JSON API](#json-api) | JSON API
 `GET /static/css/syntax.css`    | syntaxCSSHandler          | Generated syntax highlighting stylesheet
 `GET /static/`                  | http.FileServerFS         | Serve a specific static file
 
 🔒 requires authentication. ⏱ rate limited per IP: a burst of 5, then one every 12 seconds.
 Private snippets return 404 to everyone except their owner.
 
+## JSON API
+All endpoints live under `/api/v1`, take and return JSON, and report errors
+as `{"error": "message"}` (plus `"fields"` for validation errors, with status
+422). The API doesn't use cookies, so there's no CSRF token: authenticate by
+sending `Authorization: Bearer <token>`.
+
+| Method & path                     | Auth | Description |
+| --------------------------------- | ---- | ----------- |
+| `POST /api/v1/tokens`             |      | Exchange `{"email", "password", "name"?}` for a token (valid 30 days) ⏱ |
+| `DELETE /api/v1/tokens/current`   | ✔    | Revoke the token used for this request |
+| `GET /api/v1/me`                  | ✔    | The token's user |
+| `GET /api/v1/me/snippets`         | ✔    | Your snippets, including unlisted and private ones |
+| `GET /api/v1/snippets`            |      | Public snippets; `?q=` search, `?page=`, `?page_size=` (1-100, default 20) |
+| `POST /api/v1/snippets`           | ✔    | Create: `{"title", "content", "language"?, "visibility"?, "expires_in_days"?}` |
+| `GET /api/v1/snippets/{slug}`     |      | One snippet with its content (private ones only for their owner) |
+| `PATCH /api/v1/snippets/{slug}`   | ✔    | Update any of `title`, `content`, `language`, `visibility` (owner only) |
+| `DELETE /api/v1/snippets/{slug}`  | ✔    | Delete (owner only) |
+| `GET /api/v1/languages`           |      | The supported `language` values |
+
+Defaults for new snippets match the web form: plain text, public, 365 days.
+Tokens are stored as SHA-256 hashes, and changing your password revokes all
+of them.
+
+```bash
+# Get a token (use --cacert tls/cert.pem with the development certificate)
+curl --cacert tls/cert.pem -X POST https://localhost:4000/api/v1/tokens \
+  -d '{"email": "alice@example.com", "password": "pa55word123", "name": "curl"}'
+# {"expires": "...", "token": "sb_..."}
+
+curl --cacert tls/cert.pem -X POST https://localhost:4000/api/v1/snippets \
+  -H "Authorization: Bearer sb_..." \
+  -d '{"title": "Hello", "content": "fmt.Println(\"hi\")", "language": "go"}'
+```
+
+## snip, the command-line client
+```bash
+go install ./cmd/snip
+
+export SNIP_SERVER=https://localhost:4000 SNIP_CACERT=$PWD/tls/cert.pem
+snip login                         # prompts for email and password, saves a token
+snip main.go                       # upload a file (language detected), prints the URL
+git diff | snip -t "my change"     # or pipe anything in
+snip notes.md -v private -e 1      # flags: -t title, -l language, -v visibility, -e days
+snip get 3f27b2f6963c              # print a snippet (a slug or the full URL)
+snip ls                            # your snippets
+snip search "error handling"       # search public snippets
+snip rm 3f27b2f6963c
+snip whoami / snip logout
+```
+
+From the CLI, snippets default to unlisted and expire after 7 days. The token
+is saved in `~/.config/snip/config.json` (mode 0600, override with
+`SNIP_CONFIG`) and is only ever sent to the server that issued it.
+`SNIP_TOKEN` overrides the saved token, e.g. in CI.
+
 ## Middleware
 - **standard** (every request): `requestID` → `logRequest` → `recoverPanic` → `commonHeaders`
 - **dynamic** (app routes): session `LoadAndSave` → `noSurf` (CSRF) → `authenticate`
 - **limited**: dynamic + `limitAuthAttempts` (password-checking form submissions)
 - **protected**: dynamic + `requireAuthentication`
+- **api**: `authenticateToken` (bearer tokens, no sessions or CSRF); **apiAuth** adds `requireToken`
 
 `authenticate` also compares the session's `sessionVersion` with the user's
 `session_version` column, which is bumped on every password change, so changing
@@ -142,9 +200,11 @@ the last address in `X-Forwarded-For` (the one the proxy added).
 ```
 cmd/web/            HTTP handlers, routes, middleware, templates, config, servers
 cmd/migrate/        schema migration command
+cmd/snip/           command-line client for the JSON API
 internal/models/    MySQL models (snippets, users), interfaces, mocks, testdata
 internal/validator/ form validation helpers
 internal/migrate/   migration runner used by cmd/migrate and the tests
+internal/lang/      supported languages, shared by the server and the CLI
 internal/assert/    test assertion helpers
 ui/                 HTML templates and static assets (embedded via ui.Files)
 db/                 embedded migrations, database/user setup SQL

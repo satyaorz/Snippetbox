@@ -97,7 +97,7 @@ func TestSnippetView(t *testing.T) {
 		wantBody string
 	}{
 		{name: "Valid slug", urlPath: "/snippet/view/a1b2c3d4e5f6", wantCode: http.StatusOK, wantBody: "An old silent pond..."},
-		{name: "Non-existent slug", urlPath: "/snippet/view/ffffffffffff", wantCode: http.StatusNotFound},
+		{name: "Non-existent slug", urlPath: "/snippet/view/eeeeeeeeeeee", wantCode: http.StatusNotFound},
 		{name: "Old numeric ID", urlPath: "/snippet/view/1", wantCode: http.StatusNotFound},
 		{name: "Uppercase slug", urlPath: "/snippet/view/A1B2C3D4E5F6", wantCode: http.StatusNotFound},
 		{name: "Too long", urlPath: "/snippet/view/a1b2c3d4e5f6a", wantCode: http.StatusNotFound},

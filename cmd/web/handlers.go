@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/satyaorz/snippetbox/internal/lang"
 	"github.com/satyaorz/snippetbox/internal/models"
 	"github.com/satyaorz/snippetbox/internal/validator"
 )
@@ -32,9 +33,14 @@ func (form *snippetForm) validate() {
 	form.CheckField(validator.NotBlank(form.Title), "title", "This field cannot be blank")
 	form.CheckField(validator.MaxChars(form.Title, 100), "title", "This field cannot be more than 100 characters long")
 	form.CheckField(validator.NotBlank(form.Content), "content", "This field cannot be blank")
-	form.CheckField(validator.PermittedValue(form.Language, languageValues()...), "language", "Please choose a language from the list")
+	// The content column is a MySQL TEXT, which holds at most 64KB.
+	form.CheckField(len(form.Content) <= maxContentBytes, "content", "This field cannot be more than 64KB")
+	form.CheckField(validator.PermittedValue(form.Language, lang.Values()...), "language", "Please choose a language from the list")
 	form.CheckField(validator.PermittedValue(form.Visibility, models.VisibilityPublic, models.VisibilityUnlisted, models.VisibilityPrivate), "visibility", "Please choose a visibility")
 }
+
+// maxContentBytes is the largest snippet the database can store.
+const maxContentBytes = 65535
 
 // How many snippets to show on each page of the home page listing.
 const snippetsPerPage = 10
@@ -75,45 +81,61 @@ func (app *application) about(w http.ResponseWriter, r *http.Request) {
 // obviously invalid URLs get a 404 without touching the database.
 var slugRX = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
-// viewableSnippet fetches the snippet named in the {slug} wildcard and checks
-// that the current user is allowed to see it. Private snippets are only
-// visible to their owner; for everyone else we pretend they don't exist. If
-// ok is false, a response has already been sent.
-func (app *application) viewableSnippet(w http.ResponseWriter, r *http.Request) (snippet models.Snippet, ok bool) {
-	slug := r.PathValue("slug")
+// findViewableSnippet fetches a snippet by slug and checks the current user
+// may see it. Private snippets are only visible to their owner; for everyone
+// else we pretend they don't exist, so both cases return ErrNoRecord. It's
+// shared by the HTML and JSON handlers.
+func (app *application) findViewableSnippet(r *http.Request, slug string) (models.Snippet, error) {
 	if !slugRX.MatchString(slug) {
-		http.NotFound(w, r)
-		return models.Snippet{}, false
+		return models.Snippet{}, models.ErrNoRecord
 	}
 
 	snippet, err := app.snippets.Get(slug)
+	if err != nil {
+		return models.Snippet{}, err
+	}
+
+	if snippet.Visibility == models.VisibilityPrivate && !app.isOwner(r, snippet) {
+		return models.Snippet{}, models.ErrNoRecord
+	}
+
+	return snippet, nil
+}
+
+// findOwnedSnippet is like findViewableSnippet, but only succeeds if the
+// current user owns the snippet. Used for editing and deleting.
+func (app *application) findOwnedSnippet(r *http.Request, slug string) (models.Snippet, error) {
+	snippet, err := app.findViewableSnippet(r, slug)
+	if err != nil {
+		return models.Snippet{}, err
+	}
+
+	if !app.isOwner(r, snippet) {
+		return models.Snippet{}, models.ErrNoRecord
+	}
+
+	return snippet, nil
+}
+
+// viewableSnippet wraps findViewableSnippet for the HTML handlers, using the
+// {slug} wildcard. If ok is false, a 404 or 500 response has been sent.
+func (app *application) viewableSnippet(w http.ResponseWriter, r *http.Request) (snippet models.Snippet, ok bool) {
+	return app.snippetOrError(w, r, app.findViewableSnippet)
+}
+
+// ownedSnippet wraps findOwnedSnippet in the same way.
+func (app *application) ownedSnippet(w http.ResponseWriter, r *http.Request) (snippet models.Snippet, ok bool) {
+	return app.snippetOrError(w, r, app.findOwnedSnippet)
+}
+
+func (app *application) snippetOrError(w http.ResponseWriter, r *http.Request, find func(*http.Request, string) (models.Snippet, error)) (models.Snippet, bool) {
+	snippet, err := find(r, r.PathValue("slug"))
 	if err != nil {
 		if errors.Is(err, models.ErrNoRecord) {
 			http.NotFound(w, r)
 		} else {
 			app.serverError(w, r, err)
 		}
-		return models.Snippet{}, false
-	}
-
-	if snippet.Visibility == models.VisibilityPrivate && !app.isOwner(r, snippet) {
-		http.NotFound(w, r)
-		return models.Snippet{}, false
-	}
-
-	return snippet, true
-}
-
-// ownedSnippet is like viewableSnippet, but only succeeds if the current user
-// owns the snippet. Used by the edit and delete handlers.
-func (app *application) ownedSnippet(w http.ResponseWriter, r *http.Request) (snippet models.Snippet, ok bool) {
-	snippet, ok = app.viewableSnippet(w, r)
-	if !ok {
-		return models.Snippet{}, false
-	}
-
-	if !app.isOwner(r, snippet) {
-		http.NotFound(w, r)
 		return models.Snippet{}, false
 	}
 
@@ -512,6 +534,14 @@ func (app *application) accountPasswordUpdatePost(w http.ResponseWriter, r *http
 		return
 	}
 
+	// A new password should also cut off any API clients using the old
+	// credentials, so revoke all of the user's API tokens.
+	err = app.tokens.DeleteAllForUser(userID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
 	// Changing the password bumped the user's session version, which logs out
 	// all of their other sessions. Keep this one logged in by storing the new
 	// version, and renew the token as we do for any privilege change.
@@ -528,7 +558,7 @@ func (app *application) accountPasswordUpdatePost(w http.ResponseWriter, r *http
 	}
 	app.sessionManager.Put(r.Context(), "sessionVersion", version)
 
-	app.sessionManager.Put(r.Context(), "flash", "Your password has been updated! Other sessions have been logged out.")
+	app.sessionManager.Put(r.Context(), "flash", "Your password has been updated! Other sessions and API tokens have been logged out.")
 
 	http.Redirect(w, r, "/account/view", http.StatusSeeOther)
 }

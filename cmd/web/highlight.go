@@ -12,55 +12,6 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 )
 
-// language is a syntax highlighting option offered on the snippet form. Value
-// is the chroma lexer name stored in the database; "" means plain text.
-type language struct {
-	Value string
-	Label string
-}
-
-var languages = []language{
-	{"", "Plain text"},
-	{"bash", "Shell"},
-	{"c", "C"},
-	{"cpp", "C++"},
-	{"csharp", "C#"},
-	{"css", "CSS"},
-	{"go", "Go"},
-	{"html", "HTML"},
-	{"java", "Java"},
-	{"javascript", "JavaScript"},
-	{"json", "JSON"},
-	{"markdown", "Markdown"},
-	{"php", "PHP"},
-	{"python", "Python"},
-	{"ruby", "Ruby"},
-	{"rust", "Rust"},
-	{"solidity", "Solidity"},
-	{"sql", "SQL"},
-	{"typescript", "TypeScript"},
-	{"yaml", "YAML"},
-}
-
-// languageValues returns the permitted values for the language form field.
-func languageValues() []string {
-	values := make([]string, len(languages))
-	for i, l := range languages {
-		values[i] = l.Value
-	}
-	return values
-}
-
-// languageName returns the human-readable label for a stored language value.
-func languageName(value string) string {
-	for _, l := range languages {
-		if l.Value == value {
-			return l.Label
-		}
-	}
-	return "Plain text"
-}
-
 var (
 	syntaxStyle = styles.Get("github")
 

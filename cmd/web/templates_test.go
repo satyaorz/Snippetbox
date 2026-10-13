@@ -8,6 +8,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 
 	"github.com/satyaorz/snippetbox/internal/assert"
+	"github.com/satyaorz/snippetbox/internal/lang"
 )
 
 func TestHumanDate(t *testing.T) {
@@ -88,7 +89,7 @@ func TestHighlight(t *testing.T) {
 	})
 
 	t.Run("Every offered language has a lexer", func(t *testing.T) {
-		for _, l := range languages {
+		for _, l := range lang.All {
 			if l.Value == "" {
 				continue
 			}

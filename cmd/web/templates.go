@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/satyaorz/snippetbox/internal/lang"
 	"github.com/satyaorz/snippetbox/internal/models"
 	"github.com/satyaorz/snippetbox/ui"
 )
@@ -78,8 +79,8 @@ func humanDate(t time.Time) string {
 var functions = template.FuncMap{
 	"humanDate":    humanDate,
 	"highlight":    highlight,
-	"languages":    func() []language { return languages },
-	"languageName": languageName,
+	"languages":    func() []lang.Language { return lang.All },
+	"languageName": lang.Name,
 }
 
 func newTemplateCache() (map[string]*template.Template, error) {

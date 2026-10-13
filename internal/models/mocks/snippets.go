@@ -10,6 +10,7 @@ import (
 // Fixed snippets used by the handler tests:
 //   - mockSnippet: public, owned by user 1 (Alice).
 //   - privateSnippet: private, owned by user 2.
+//   - newSnippet: what Insert "creates" (Insert always returns its slug).
 var (
 	mockSnippet = models.Snippet{
 		ID:         1,
@@ -19,6 +20,18 @@ var (
 		Title:      "An old silent pond",
 		Content:    "An old silent pond...",
 		Language:   "",
+		Visibility: models.VisibilityPublic,
+		Created:    time.Now(),
+		Expires:    time.Now(),
+	}
+
+	newSnippet = models.Snippet{
+		ID:         3,
+		Slug:       "ffffffffffff",
+		UserID:     1,
+		AuthorName: "Alice",
+		Title:      "New snippet",
+		Content:    "Fresh",
 		Visibility: models.VisibilityPublic,
 		Created:    time.Now(),
 		Expires:    time.Now(),
@@ -41,7 +54,7 @@ var (
 type SnippetModel struct{}
 
 func (m *SnippetModel) Insert(userID int, title, content, language, visibility string, expires int) (string, error) {
-	return "ffffffffffff", nil
+	return newSnippet.Slug, nil
 }
 
 func (m *SnippetModel) Get(slug string) (models.Snippet, error) {
@@ -50,6 +63,8 @@ func (m *SnippetModel) Get(slug string) (models.Snippet, error) {
 		return mockSnippet, nil
 	case privateSnippet.Slug:
 		return privateSnippet, nil
+	case newSnippet.Slug:
+		return newSnippet, nil
 	default:
 		return models.Snippet{}, models.ErrNoRecord
 	}

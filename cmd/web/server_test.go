@@ -132,7 +132,7 @@ func TestRequestLogging(t *testing.T) {
 	app.logger = slog.New(slog.NewJSONHandler(&buf, nil))
 	ts := newTestServer(t, app.routes())
 
-	res := ts.get(t, "/snippet/view/ffffffffffff")
+	res := ts.get(t, "/snippet/view/eeeeeeeeeeee")
 	id := res.headers.Get("X-Request-Id")
 	assert.Equal(t, len(id), 16)
 
@@ -141,5 +141,5 @@ func TestRequestLogging(t *testing.T) {
 	assert.Equal[any](t, entry["msg"], "request")
 	assert.Equal[any](t, entry["request_id"], id)
 	assert.Equal[any](t, entry["status"], float64(http.StatusNotFound))
-	assert.Equal[any](t, entry["uri"], "/snippet/view/ffffffffffff")
+	assert.Equal[any](t, entry["uri"], "/snippet/view/eeeeeeeeeeee")
 }

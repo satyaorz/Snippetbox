@@ -193,18 +193,7 @@ func (app *application) noSurf(next http.Handler) http.Handler {
 
 	// nosurf checks that the Origin (or Referer) of a form submission matches
 	// this site, so it needs to know whether the browser is using HTTPS.
-	// With -tls=off the connection to us is plain HTTP; behind a proxy we
-	// believe its X-Forwarded-Proto header.
-	csrfHandler.SetIsTLSFunc(func(r *http.Request) bool {
-		switch {
-		case app.config.tlsMode != "off":
-			return true
-		case app.config.behindProxy:
-			return r.Header.Get("X-Forwarded-Proto") == "https"
-		default:
-			return false
-		}
-	})
+	csrfHandler.SetIsTLSFunc(app.isHTTPS)
 
 	return csrfHandler
 }

@@ -1,6 +1,7 @@
 -- Resets the test tables to a known state. Run before every test by
 -- newTestDB(). Deleting rows and resetting AUTO_INCREMENT is much faster than
 -- dropping and recreating the tables (the FULLTEXT index makes that slow).
+DELETE FROM tokens;
 DELETE FROM snippets;
 DELETE FROM users;
 ALTER TABLE users AUTO_INCREMENT = 1;

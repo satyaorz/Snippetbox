@@ -27,13 +27,18 @@ func (app *application) serverError(w http.ResponseWriter, r *http.Request, err 
 
 	app.logger.Error(err.Error(), "request_id", requestIDFrom(r), "method", method, "uri", uri, "trace", trace)
 
+	message := http.StatusText(http.StatusInternalServerError)
 	if app.config.debug {
-		body := fmt.Sprintf("%s\n%s", err, trace)
-		http.Error(w, body, http.StatusInternalServerError)
+		message = fmt.Sprintf("%s\n%s", err, trace)
+	}
+
+	// API clients get a JSON error instead of plain text.
+	if isAPIRequest(r) {
+		app.apiError(w, r, http.StatusInternalServerError, message)
 		return
 	}
 
-	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	http.Error(w, message, http.StatusInternalServerError)
 }
 
 func (app *application) render(w http.ResponseWriter, r *http.Request, status int, page string, data templateData) {
@@ -122,4 +127,28 @@ func (app *application) isAuthenticated(r *http.Request) bool {
 // snippets (UserID 0) have no owner.
 func (app *application) isOwner(r *http.Request, snippet models.Snippet) bool {
 	return snippet.UserID != 0 && snippet.UserID == app.authenticatedUserID(r)
+}
+
+// isHTTPS reports whether the browser is talking to us over HTTPS. With
+// -tls=off the connection to us is plain HTTP; behind a proxy we believe its
+// X-Forwarded-Proto header.
+func (app *application) isHTTPS(r *http.Request) bool {
+	switch {
+	case app.config.tlsMode != "off":
+		return true
+	case app.config.behindProxy:
+		return r.Header.Get("X-Forwarded-Proto") == "https"
+	default:
+		return false
+	}
+}
+
+// baseURL returns the scheme and host the client used to reach us, for
+// building absolute URLs in API responses.
+func (app *application) baseURL(r *http.Request) string {
+	scheme := "http"
+	if app.isHTTPS(r) {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
 }
